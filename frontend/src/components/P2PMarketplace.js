@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -8,9 +8,6 @@ import {
   Tab,
   Button,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
   TextField,
   FormControl,
   InputLabel,
@@ -19,7 +16,6 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Divider,
   Table,
   TableBody,
   TableCell,
@@ -29,13 +25,6 @@ import {
 } from '@mui/material';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
-
-// Mock token data (in a real app, this would come from an API)
-const mockTokens = [
-  { address: '0x1234567890123456789012345678901234567890', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { address: '0x2345678901234567890123456789012345678901', symbol: 'DAI', name: 'Dai Stablecoin', decimals: 18 },
-  { address: '0x3456789012345678901234567890123456789012', symbol: 'WETH', name: 'Wrapped Ether', decimals: 18 },
-];
 
 // Mock orders data
 const mockOrders = [
@@ -67,7 +56,7 @@ const mockOrders = [
     lendToken: '0x3456789012345678901234567890123456789012',
     lendAmount: ethers.utils.parseUnits('1', 18),
     collateralToken: '0x1234567890123456789012345678901234567890',
-    lendAmount: ethers.utils.parseUnits('1800', 6),
+    collateralRatio: ethers.utils.parseUnits('1800', 6),
     interestRate: 300, // 3%
     duration: 15 * 24 * 60 * 60, // 15 days
     status: 'PENDING'
@@ -75,7 +64,18 @@ const mockOrders = [
 ];
 
 const P2PMarketplace = () => {
-  const { account, isConnected, contracts, connectWallet, getTokenBalance, approveToken } = useWeb3();
+  const { 
+    account, 
+    chainId,
+    isConnected, 
+    contracts, 
+    connectWallet, 
+    getTokenBalance, 
+    approveToken,
+    supportedTokens,
+    formatTokenAmount,
+    getTokenSymbol
+  } = useWeb3();
   
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -95,21 +95,55 @@ const P2PMarketplace = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
   const [userBalances, setUserBalances] = useState({});
 
-  // Fetch data
-  useEffect(() => {
-    if (isConnected) {
-      fetchOrders();
-      fetchUserBalances();
-    }
-  }, [isConnected, account]);
+  // 定义 showSnackbar 函数
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  }, []);
 
-  const fetchOrders = async () => {
+  // 当支持的代币变化时，重置选择的代币
+  useEffect(() => {
+    if (supportedTokens.length > 0) {
+      if (!lendToken) {
+        setLendToken(supportedTokens[0].address);
+      }
+      if (!collateralToken && supportedTokens.length > 1) {
+        setCollateralToken(supportedTokens[1].address);
+      } else if (!collateralToken) {
+        setCollateralToken(supportedTokens[0].address);
+      }
+    }
+  }, [supportedTokens, lendToken, collateralToken]);
+
+  // 使用 useCallback 包装 fetchOrders 函数
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       
       // In a real app, you would fetch this data from the contract or API
       // For now, we'll use mock data
-      setAvailableOrders(mockOrders);
+      
+      // Filter orders based on selected tokens
+      if (supportedTokens.length > 0) {
+        // Update orders with supported tokens
+        const updatedOrders = mockOrders.map(order => {
+          // Find corresponding tokens
+          const lendTokenInfo = supportedTokens.find(t => t.symbol === 'USDC') || supportedTokens[0];
+          const collateralTokenInfo = supportedTokens.find(t => t.symbol === 'WETH') || 
+                                     (supportedTokens.length > 1 ? supportedTokens[1] : supportedTokens[0]);
+          
+          return {
+            ...order,
+            lendToken: lendTokenInfo.address,
+            collateralToken: collateralTokenInfo.address
+          };
+        });
+        
+        setAvailableOrders(updatedOrders);
+      } else {
+        setAvailableOrders([]);
+      }
       
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -117,15 +151,16 @@ const P2PMarketplace = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supportedTokens, showSnackbar]);
 
-  const fetchUserBalances = async () => {
+  // 使用 useCallback 包装 fetchUserBalances 函数
+  const fetchUserBalances = useCallback(async () => {
     try {
       if (!account) return;
       
       const balances = {};
       
-      for (const token of mockTokens) {
+      for (const token of supportedTokens) {
         balances[token.address] = await getTokenBalance(token.address);
       }
       
@@ -133,14 +168,24 @@ const P2PMarketplace = () => {
       
     } catch (error) {
       console.error('Error fetching user balances:', error);
+      showSnackbar('Error fetching user balances', 'error');
     }
-  };
+  }, [account, supportedTokens, getTokenBalance, showSnackbar]);
+
+  // Fetch data
+  useEffect(() => {
+    if (isConnected) {
+      fetchOrders();
+      fetchUserBalances();
+    }
+  }, [isConnected, fetchOrders, fetchUserBalances]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
 
-  const handleCreateOrder = async () => {
+  // 使用 useCallback 包装 handleCreateOrder 函数
+  const handleCreateOrder = useCallback(async () => {
     if (!isConnected) {
       connectWallet();
       return;
@@ -155,7 +200,12 @@ const P2PMarketplace = () => {
       setLoading(true);
       
       // Get token details
-      const token = mockTokens.find(t => t.address === lendToken);
+      const token = supportedTokens.find(t => t.address === lendToken);
+      if (!token) {
+        showSnackbar('Invalid token selected', 'error');
+        return;
+      }
+      
       const amountInWei = ethers.utils.parseUnits(lendAmount, token.decimals);
       
       // Check user balance
@@ -177,7 +227,7 @@ const P2PMarketplace = () => {
       //   lendToken,
       //   amountInWei,
       //   collateralToken,
-      //   ethers.utils.parseUnits(collateralAmount, mockTokens.find(t => t.address === collateralToken).decimals),
+      //   ethers.utils.parseUnits(collateralAmount, supportedTokens.find(t => t.address === collateralToken).decimals),
       //   parseInt(interestRate) * 100, // Convert to basis points
       //   parseInt(duration) * 24 * 60 * 60 // Convert to seconds
       // );
@@ -186,9 +236,7 @@ const P2PMarketplace = () => {
       // For demo, we'll just simulate success
       setTimeout(() => {
         // Reset form
-        setLendToken('');
         setLendAmount('');
-        setCollateralToken('');
         setCollateralAmount('');
         setInterestRate('');
         setDuration('');
@@ -202,13 +250,18 @@ const P2PMarketplace = () => {
       
     } catch (error) {
       console.error('Error creating order:', error);
-      showSnackbar('Error creating order', 'error');
+      showSnackbar(`Error creating order: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    isConnected, connectWallet, lendToken, lendAmount, collateralToken, 
+    collateralAmount, interestRate, duration, showSnackbar, userBalances, 
+    approveToken, contracts, fetchOrders, fetchUserBalances, supportedTokens
+  ]);
 
-  const handleFulfillOrder = async (orderId) => {
+  // 使用 useCallback 包装 handleFulfillOrder 函数
+  const handleFulfillOrder = useCallback(async (orderId) => {
     if (!isConnected) {
       connectWallet();
       return;
@@ -224,7 +277,11 @@ const P2PMarketplace = () => {
       }
       
       // Get token details
-      const token = mockTokens.find(t => t.address === order.collateralToken);
+      const token = supportedTokens.find(t => t.address === order.collateralToken);
+      if (!token) {
+        showSnackbar('Invalid token in order', 'error');
+        return;
+      }
       
       // Check user balance
       const balance = userBalances[order.collateralToken];
@@ -255,36 +312,18 @@ const P2PMarketplace = () => {
       
     } catch (error) {
       console.error('Error fulfilling order:', error);
-      showSnackbar('Error fulfilling order', 'error');
+      showSnackbar(`Error fulfilling order: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    isConnected, connectWallet, availableOrders, showSnackbar, 
+    userBalances, approveToken, contracts, fetchOrders, fetchUserBalances, supportedTokens
+  ]);
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
-  };
-
-  const handleCloseSnackbar = () => {
+  const handleCloseSnackbar = useCallback(() => {
     setSnackbarOpen(false);
-  };
-
-  const formatAmount = (amount, decimals) => {
-    if (!amount) return '0';
-    return ethers.utils.formatUnits(amount, decimals);
-  };
-
-  const getTokenSymbol = (address) => {
-    const token = mockTokens.find(t => t.address === address);
-    return token ? token.symbol : 'Unknown';
-  };
-
-  const getTokenDecimals = (address) => {
-    const token = mockTokens.find(t => t.address === address);
-    return token ? token.decimals : 18;
-  };
+  }, []);
 
   return (
     <Container maxWidth="lg">
@@ -301,6 +340,15 @@ const P2PMarketplace = () => {
             <Button variant="contained" onClick={connectWallet}>
               Connect Wallet
             </Button>
+          </Paper>
+        ) : supportedTokens.length === 0 ? (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body1" paragraph>
+              No supported tokens found for the current network (Chain ID: {chainId}).
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Please switch to a supported network.
+            </Typography>
           </Paper>
         ) : (
           <>
@@ -338,10 +386,10 @@ const P2PMarketplace = () => {
                           {availableOrders.map((order) => (
                             <TableRow key={order.id}>
                               <TableCell>
-                                {formatAmount(order.lendAmount, getTokenDecimals(order.lendToken))} {getTokenSymbol(order.lendToken)}
+                                {formatTokenAmount(order.lendToken, order.lendAmount)} {getTokenSymbol(order.lendToken)}
                               </TableCell>
                               <TableCell>
-                                {formatAmount(order.collateralAmount, getTokenDecimals(order.collateralToken))} {getTokenSymbol(order.collateralToken)}
+                                {formatTokenAmount(order.collateralToken, order.collateralAmount)} {getTokenSymbol(order.collateralToken)}
                               </TableCell>
                               <TableCell>
                                 {order.interestRate / 100}%
@@ -381,8 +429,8 @@ const P2PMarketplace = () => {
                           onChange={(e) => setLendToken(e.target.value)}
                           label="Lend Token"
                         >
-                          {mockTokens.map((token) => (
-                            <MenuItem key={token.address} value={token.address}>
+                          {supportedTokens.map((token) => (
+                            <MenuItem key={`${token.address}-${token.symbol}`} value={token.address}>
                               {token.symbol} - {token.name}
                             </MenuItem>
                           ))}
@@ -410,8 +458,8 @@ const P2PMarketplace = () => {
                           onChange={(e) => setCollateralToken(e.target.value)}
                           label="Collateral Token"
                         >
-                          {mockTokens.map((token) => (
-                            <MenuItem key={token.address} value={token.address}>
+                          {supportedTokens.map((token) => (
+                            <MenuItem key={`${token.address}-${token.symbol}`} value={token.address}>
                               {token.symbol} - {token.name}
                             </MenuItem>
                           ))}
@@ -461,7 +509,7 @@ const P2PMarketplace = () => {
 
                   {lendToken && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Your balance: {formatAmount(userBalances[lendToken], getTokenDecimals(lendToken))} {getTokenSymbol(lendToken)}
+                      Your balance: {formatTokenAmount(lendToken, userBalances[lendToken])} {getTokenSymbol(lendToken)}
                     </Typography>
                   )}
 

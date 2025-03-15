@@ -9,19 +9,24 @@ import {
   IconButton, 
   Menu, 
   MenuItem,
-  Chip
+  Chip,
+  Tooltip,
+  Divider
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import { useWeb3 } from '../contexts/Web3Context';
-import { useApi } from '../contexts/ApiContext';
+import { getNetworkName } from '../utils/networkConfig';
 
 const Navbar = () => {
   const { account, isConnected, connectWallet, disconnectWallet, chainId } = useWeb3();
-  const { selectedEndpoint } = useApi();
+
   
   const [anchorEl, setAnchorEl] = useState(null);
+  const [networkMenuAnchorEl, setNetworkMenuAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const networkMenuOpen = Boolean(networkMenuAnchorEl);
   
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
@@ -31,11 +36,38 @@ const Navbar = () => {
     setAnchorEl(null);
   };
 
+  const handleNetworkMenu = (event) => {
+    setNetworkMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleNetworkMenuClose = () => {
+    setNetworkMenuAnchorEl(null);
+  };
+
+  // 切换到指定网络
+  const switchNetwork = async (networkId) => {
+    if (!window.ethereum) return;
+    
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${networkId.toString(16)}` }],
+      });
+    } catch (error) {
+      console.error('Error switching network:', error);
+    }
+    
+    handleNetworkMenuClose();
+  };
+
   // Format address for display
   const formatAddress = (address) => {
     if (!address) return '';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
+
+  // 获取当前网络名称
+  const networkName = getNetworkName(chainId) || `Chain ID: ${chainId || 'Unknown'}`;
 
   return (
     <AppBar position="static">
@@ -59,8 +91,43 @@ const Navbar = () => {
           </Button>
         </Box>
         
+        {isConnected && (
+          <Tooltip title="Switch Network">
+            <Chip
+              icon={<NetworkCheckIcon />}
+              label={networkName}
+              variant="outlined"
+              onClick={handleNetworkMenu}
+              color="secondary"
+              sx={{ color: 'white', borderColor: 'white', mr: 1 }}
+            />
+          </Tooltip>
+        )}
+        
+        <Menu
+          id="network-menu"
+          anchorEl={networkMenuAnchorEl}
+          open={networkMenuOpen}
+          onClose={handleNetworkMenuClose}
+          MenuListProps={{
+            'aria-labelledby': 'network-button',
+          }}
+        >
+          <MenuItem onClick={() => switchNetwork(1)}>Ethereum Mainnet</MenuItem>
+          <MenuItem onClick={() => switchNetwork(11155111)}>Sepolia Testnet</MenuItem>
+          <Divider />
+          <MenuItem onClick={() => switchNetwork(137)}>Polygon Mainnet</MenuItem>
+          <MenuItem onClick={() => switchNetwork(80001)}>Mumbai Testnet</MenuItem>
+          <Divider />
+          <MenuItem onClick={() => switchNetwork(56)}>Binance Smart Chain</MenuItem>
+          <MenuItem onClick={() => switchNetwork(97)}>BSC Testnet</MenuItem>
+          <Divider />
+          <MenuItem onClick={() => switchNetwork(1337)}>Ganache</MenuItem>
+          <MenuItem onClick={() => switchNetwork(31337)}>Hardhat Network</MenuItem>
+        </Menu>
+        
         {isConnected ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Chip
               icon={<AccountBalanceWalletIcon />}
               label={formatAddress(account)}

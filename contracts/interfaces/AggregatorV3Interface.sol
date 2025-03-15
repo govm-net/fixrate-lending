@@ -9,6 +9,9 @@ interface AggregatorV3Interface {
   function decimals() external view returns (uint8);
   function description() external view returns (string memory);
   function version() external view returns (uint256);
+  function latestAnswer() external view returns (int256);
+  function latestTimestamp() external view returns (uint256);
+  function latestRound() external view returns (uint256);
 
   // getRoundData and latestRoundData should both raise "No data present"
   // if they do not have data to report, instead of returning unset values

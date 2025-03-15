@@ -15,7 +15,7 @@ const DEFAULT_API_ENDPOINTS = [
   {
     name: 'Local Development',
     url: 'http://localhost:3001',
-    chainId: 1337
+    chainId: 31337
   }
 ];
 

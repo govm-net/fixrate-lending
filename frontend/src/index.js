@@ -8,6 +8,9 @@ import { Web3Provider } from './contexts/Web3Context';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
+// 确定基础路径
+const basename = process.env.NODE_ENV === 'production' ? '/fixrate-lending' : '/';
+
 const theme = createTheme({
   palette: {
     mode: 'light',
@@ -29,7 +32,7 @@ const theme = createTheme({
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ApiProvider>

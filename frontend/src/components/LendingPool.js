@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -24,15 +24,19 @@ import {
 import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
 
-// Mock token data (in a real app, this would come from an API)
-const mockTokens = [
-  { address: '0x1234567890123456789012345678901234567890', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { address: '0x2345678901234567890123456789012345678901', symbol: 'DAI', name: 'Dai Stablecoin', decimals: 18 },
-  { address: '0x3456789012345678901234567890123456789012', symbol: 'WETH', name: 'Wrapped Ether', decimals: 18 },
-];
-
 const LendingPool = () => {
-  const { account, isConnected, contracts, connectWallet, getTokenBalance, approveToken } = useWeb3();
+  const { 
+    account, 
+    chainId,
+    isConnected, 
+    contracts, 
+    connectWallet, 
+    getTokenBalance, 
+    approveToken, 
+    supportedTokens,
+    formatTokenAmount,
+    getTokenSymbol
+  } = useWeb3();
   
   const [tabValue, setTabValue] = useState(0);
   const [selectedToken, setSelectedToken] = useState('');
@@ -42,7 +46,6 @@ const LendingPool = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [poolData, setPoolData] = useState({
-    supportedTokens: [],
     poolBalances: {},
     availableBalances: {},
     userBalances: {},
@@ -51,41 +54,57 @@ const LendingPool = () => {
     minCollateralRatio: 0
   });
 
-  // Fetch pool data
-  useEffect(() => {
-    if (isConnected && contracts.lendingPool) {
-      fetchPoolData();
-    }
-  }, [isConnected, contracts.lendingPool, account]);
+  // 定义showSnackbar函数
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  }, []);
 
-  const fetchPoolData = async () => {
+  // 当支持的代币变化时，重置选择的代币
+  useEffect(() => {
+    if (supportedTokens.length > 0 && !selectedToken) {
+      setSelectedToken(supportedTokens[0].address);
+    }
+  }, [supportedTokens, selectedToken]);
+
+  // Fetch pool data
+  const fetchPoolData = useCallback(async () => {
     try {
       setLoading(true);
       
       // In a real app, you would fetch this data from the contract
       // For now, we'll use mock data
       const mockPoolData = {
-        supportedTokens: mockTokens,
-        poolBalances: {
-          '0x1234567890123456789012345678901234567890': ethers.utils.parseUnits('100000', 6),
-          '0x2345678901234567890123456789012345678901': ethers.utils.parseUnits('50000', 18),
-          '0x3456789012345678901234567890123456789012': ethers.utils.parseUnits('10', 18),
-        },
-        availableBalances: {
-          '0x1234567890123456789012345678901234567890': ethers.utils.parseUnits('80000', 6),
-          '0x2345678901234567890123456789012345678901': ethers.utils.parseUnits('40000', 18),
-          '0x3456789012345678901234567890123456789012': ethers.utils.parseUnits('8', 18),
-        },
-        userBalances: {},
-        minInterestRate: 500, // 5%
-        maxLoanDuration: 30 * 24 * 60 * 60, // 30 days
-        minCollateralRatio: 15000 // 150%
+        poolBalances: {},
+        availableBalances: {},
+        userBalances: {}
       };
       
-      // Fetch user balances for each token
-      if (account) {
-        for (const token of mockTokens) {
-          mockPoolData.userBalances[token.address] = await getTokenBalance(token.address);
+      // Set mock balances for each token
+      for (const token of supportedTokens) {
+        // Pool balances
+        mockPoolData.poolBalances[token.address] = ethers.utils.parseUnits(
+          token.symbol === 'USDC' ? '1000000' : 
+          token.symbol === 'DAI' ? '2000000' : 
+          '1000', 
+          token.decimals
+        );
+        
+        // Available balances
+        mockPoolData.availableBalances[token.address] = ethers.utils.parseUnits(
+          token.symbol === 'USDC' ? '500000' : 
+          token.symbol === 'DAI' ? '1000000' : 
+          '500', 
+          token.decimals
+        );
+        
+        // User balances
+        if (account) {
+          console.log(`Fetching balance for ${token.symbol} (${token.address}) with ${token.decimals} decimals`);
+          const balance = await getTokenBalance(token.address);
+          console.log(`Received balance for ${token.symbol}: ${ethers.utils.formatUnits(balance, token.decimals)} ${token.symbol}`);
+          mockPoolData.userBalances[token.address] = balance;
         }
       }
       
@@ -96,7 +115,13 @@ const LendingPool = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supportedTokens, account, getTokenBalance, showSnackbar]);
+
+  useEffect(() => {
+    if (isConnected && contracts.lendingPool) {
+      fetchPoolData();
+    }
+  }, [isConnected, contracts.lendingPool, fetchPoolData]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -125,7 +150,12 @@ const LendingPool = () => {
       setLoading(true);
       
       // Get token details
-      const token = mockTokens.find(t => t.address === selectedToken);
+      const token = supportedTokens.find(t => t.address === selectedToken);
+      if (!token) {
+        showSnackbar('Invalid token selected', 'error');
+        return;
+      }
+      
       const amountInWei = ethers.utils.parseUnits(amount, token.decimals);
       
       // Check user balance
@@ -142,24 +172,30 @@ const LendingPool = () => {
       // Deposit to pool
       showSnackbar(`Depositing ${amount} ${token.symbol}...`, 'info');
       
-      // In a real app, you would call the contract method
-      // const tx = await contracts.lendingPool.deposit(selectedToken, amountInWei);
-      // await tx.wait();
+      // 直接使用已连接到 signer 的合约
+      const tx = await contracts.lendingPool.deposit(selectedToken, amountInWei);
       
-      // For demo, we'll just simulate success
-      setTimeout(() => {
-        // Update pool data
+      // 等待交易确认
+      showSnackbar(`Transaction submitted. Waiting for confirmation...`, 'info');
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        // 交易成功
+        // 更新池数据
         fetchPoolData();
         
-        // Reset form
+        // 重置表单
         setAmount('');
         
         showSnackbar(`Successfully deposited ${amount} ${token.symbol}`, 'success');
-      }, 2000);
+      } else {
+        // 交易失败
+        showSnackbar(`Transaction failed. Please try again.`, 'error');
+      }
       
     } catch (error) {
       console.error('Error depositing to pool:', error);
-      showSnackbar('Error depositing to pool', 'error');
+      showSnackbar(`Error depositing to pool: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -180,7 +216,12 @@ const LendingPool = () => {
       setLoading(true);
       
       // Get token details
-      const token = mockTokens.find(t => t.address === selectedToken);
+      const token = supportedTokens.find(t => t.address === selectedToken);
+      if (!token) {
+        showSnackbar('Invalid token selected', 'error');
+        return;
+      }
+      
       const amountInWei = ethers.utils.parseUnits(amount, token.decimals);
       
       // Check available balance
@@ -193,42 +234,37 @@ const LendingPool = () => {
       // Withdraw from pool
       showSnackbar(`Withdrawing ${amount} ${token.symbol}...`, 'info');
       
-      // In a real app, you would call the contract method
-      // const tx = await contracts.lendingPool.withdraw(selectedToken, amountInWei);
-      // await tx.wait();
+      // 直接使用已连接到 signer 的合约
+      const tx = await contracts.lendingPool.withdraw(selectedToken, amountInWei);
       
-      // For demo, we'll just simulate success
-      setTimeout(() => {
-        // Update pool data
+      // 等待交易确认
+      showSnackbar(`Transaction submitted. Waiting for confirmation...`, 'info');
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        // 交易成功
+        // 更新池数据
         fetchPoolData();
         
-        // Reset form
+        // 重置表单
         setAmount('');
         
         showSnackbar(`Successfully withdrew ${amount} ${token.symbol}`, 'success');
-      }, 2000);
+      } else {
+        // 交易失败
+        showSnackbar(`Transaction failed. Please try again.`, 'error');
+      }
       
     } catch (error) {
       console.error('Error withdrawing from pool:', error);
-      showSnackbar('Error withdrawing from pool', 'error');
+      showSnackbar(`Error withdrawing from pool: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
-  };
-
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
-  };
-
-  const formatAmount = (amount, decimals) => {
-    if (!amount) return '0';
-    return ethers.utils.formatUnits(amount, decimals);
   };
 
   return (
@@ -246,6 +282,15 @@ const LendingPool = () => {
             <Button variant="contained" onClick={connectWallet}>
               Connect Wallet
             </Button>
+          </Paper>
+        ) : supportedTokens.length === 0 ? (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body1" paragraph>
+              No supported tokens found for the current network (Chain ID: {chainId}).
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Please switch to a supported network.
+            </Typography>
           </Paper>
         ) : (
           <>
@@ -275,8 +320,8 @@ const LendingPool = () => {
                         onChange={handleTokenChange}
                         label="Token"
                       >
-                        {poolData.supportedTokens.map((token) => (
-                          <MenuItem key={token.address} value={token.address}>
+                        {supportedTokens.map((token) => (
+                          <MenuItem key={`${token.address}-${token.symbol}`} value={token.address}>
                             {token.symbol} - {token.name}
                           </MenuItem>
                         ))}
@@ -298,11 +343,23 @@ const LendingPool = () => {
                     {selectedToken && (
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         {tabValue === 0 ? (
-                          <>Your balance: {formatAmount(poolData.userBalances[selectedToken], 
-                            poolData.supportedTokens.find(t => t.address === selectedToken)?.decimals)} {poolData.supportedTokens.find(t => t.address === selectedToken)?.symbol}</>
+                          <>
+                            Your balance: {formatTokenAmount(selectedToken, poolData.userBalances[selectedToken])} {getTokenSymbol(selectedToken)}
+                            {getTokenSymbol(selectedToken) === 'USDC' && (
+                              <span style={{ color: '#666', fontSize: '0.8rem', marginLeft: '5px' }}>
+                                (USDC has 6 decimals)
+                              </span>
+                            )}
+                          </>
                         ) : (
-                          <>Available in pool: {formatAmount(poolData.availableBalances[selectedToken], 
-                            poolData.supportedTokens.find(t => t.address === selectedToken)?.decimals)} {poolData.supportedTokens.find(t => t.address === selectedToken)?.symbol}</>
+                          <>
+                            Available in pool: {formatTokenAmount(selectedToken, poolData.availableBalances[selectedToken])} {getTokenSymbol(selectedToken)}
+                            {getTokenSymbol(selectedToken) === 'USDC' && (
+                              <span style={{ color: '#666', fontSize: '0.8rem', marginLeft: '5px' }}>
+                                (USDC has 6 decimals)
+                              </span>
+                            )}
+                          </>
                         )}
                       </Typography>
                     )}
@@ -348,13 +405,13 @@ const LendingPool = () => {
                       Pool Balances
                     </Typography>
                     <Divider sx={{ mb: 2 }} />
-                    {poolData.supportedTokens.map((token) => (
-                      <Box key={token.address} sx={{ mb: 1 }}>
+                    {supportedTokens.map((token) => (
+                      <Box key={`${token.address}-${token.symbol}`} sx={{ mb: 1 }}>
                         <Typography variant="body2">
-                          {token.symbol}: {formatAmount(poolData.poolBalances[token.address], token.decimals)}
+                          {token.symbol}: {formatTokenAmount(token.address, poolData.poolBalances[token.address])}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                          Available: {formatAmount(poolData.availableBalances[token.address], token.decimals)}
+                          Available: {formatTokenAmount(token.address, poolData.availableBalances[token.address])}
                         </Typography>
                       </Box>
                     ))}

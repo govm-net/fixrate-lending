@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -7,14 +7,9 @@ import {
   Tabs,
   Tab,
   Button,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
   Alert,
   Snackbar,
   CircularProgress,
-  Divider,
   Table,
   TableBody,
   TableCell,
@@ -25,13 +20,6 @@ import {
 } from '@mui/material';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
-
-// Mock token data (in a real app, this would come from an API)
-const mockTokens = [
-  { address: '0x1234567890123456789012345678901234567890', symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { address: '0x2345678901234567890123456789012345678901', symbol: 'DAI', name: 'Dai Stablecoin', decimals: 18 },
-  { address: '0x3456789012345678901234567890123456789012', symbol: 'WETH', name: 'Wrapped Ether', decimals: 18 },
-];
 
 // Mock orders data
 const mockLendingOrders = [
@@ -77,7 +65,18 @@ const mockBorrowingOrders = [
 ];
 
 const MyOrders = () => {
-  const { account, isConnected, contracts, connectWallet, getTokenBalance, approveToken } = useWeb3();
+  const { 
+    account, 
+    chainId,
+    isConnected, 
+    contracts, 
+    connectWallet, 
+    getTokenBalance, 
+    approveToken,
+    supportedTokens,
+    formatTokenAmount,
+    getTokenSymbol
+  } = useWeb3();
   
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -90,15 +89,15 @@ const MyOrders = () => {
   const [borrowingOrders, setBorrowingOrders] = useState([]);
   const [userBalances, setUserBalances] = useState({});
 
-  // Fetch data
-  useEffect(() => {
-    if (isConnected) {
-      fetchOrders();
-      fetchUserBalances();
-    }
-  }, [isConnected, account]);
+  // 定义showSnackbar函数
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  }, []);
 
-  const fetchOrders = async () => {
+  // Fetch data
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -106,45 +105,61 @@ const MyOrders = () => {
       // For now, we'll use mock data
       
       // Filter orders for the current user
-      if (account) {
+      if (account && supportedTokens.length > 0) {
         const mockAccount = '0x4567890123456789012345678901234567890123'; // For demo purposes
         
-        // In a real app, you would use the actual account
-        // const filteredLendingOrders = mockLendingOrders.filter(order => order.lender.toLowerCase() === account.toLowerCase());
-        // const filteredBorrowingOrders = mockBorrowingOrders.filter(order => order.borrower.toLowerCase() === account.toLowerCase());
+        // For demo purposes, we'll use the current account for some orders
+        const userOrders = mockLendingOrders.concat(mockBorrowingOrders).filter(order => 
+          order.lender.toLowerCase() === account.toLowerCase() || 
+          order.borrower.toLowerCase() === account.toLowerCase() ||
+          order.lender.toLowerCase() === mockAccount.toLowerCase() || 
+          order.borrower.toLowerCase() === mockAccount.toLowerCase()
+        );
         
-        // For demo, we'll use the mock account
-        const filteredLendingOrders = mockLendingOrders.filter(order => order.lender.toLowerCase() === mockAccount.toLowerCase());
-        const filteredBorrowingOrders = mockBorrowingOrders.filter(order => order.borrower.toLowerCase() === mockAccount.toLowerCase());
+        setLendingOrders(userOrders.filter(order => 
+          order.lender.toLowerCase() === account.toLowerCase() ||
+          order.lender.toLowerCase() === mockAccount.toLowerCase()
+        ));
         
-        setLendingOrders(filteredLendingOrders);
-        setBorrowingOrders(filteredBorrowingOrders);
+        setBorrowingOrders(userOrders.filter(order => 
+          order.borrower.toLowerCase() === account.toLowerCase() ||
+          order.borrower.toLowerCase() === mockAccount.toLowerCase()
+        ));
+      } else {
+        setLendingOrders([]);
+        setBorrowingOrders([]);
       }
-      
     } catch (error) {
       console.error('Error fetching orders:', error);
       showSnackbar('Error fetching orders', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [account, supportedTokens, showSnackbar]);
 
-  const fetchUserBalances = async () => {
+  const fetchUserBalances = useCallback(async () => {
     try {
       if (!account) return;
       
       const balances = {};
       
-      for (const token of mockTokens) {
+      for (const token of supportedTokens) {
         balances[token.address] = await getTokenBalance(token.address);
       }
       
       setUserBalances(balances);
-      
     } catch (error) {
       console.error('Error fetching user balances:', error);
+      showSnackbar('Error fetching user balances', 'error');
     }
-  };
+  }, [account, supportedTokens, getTokenBalance, showSnackbar]);
+
+  useEffect(() => {
+    if (isConnected) {
+      fetchOrders();
+      fetchUserBalances();
+    }
+  }, [isConnected, fetchOrders, fetchUserBalances]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -168,7 +183,7 @@ const MyOrders = () => {
       
     } catch (error) {
       console.error('Error cancelling order:', error);
-      showSnackbar('Error cancelling order', 'error');
+      showSnackbar(`Error cancelling order: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -185,7 +200,12 @@ const MyOrders = () => {
       }
       
       // Calculate repayment amount (principal + interest)
-      const token = mockTokens.find(t => t.address === order.lendToken);
+      const token = supportedTokens.find(t => t.address === order.lendToken);
+      if (!token) {
+        showSnackbar('Invalid token in order', 'error');
+        return;
+      }
+      
       const principal = order.lendAmount;
       const interest = principal.mul(order.interestRate).div(10000);
       const totalRepayment = principal.add(interest);
@@ -220,76 +240,46 @@ const MyOrders = () => {
       
     } catch (error) {
       console.error('Error repaying loan:', error);
-      showSnackbar('Error repaying loan', 'error');
+      showSnackbar(`Error repaying loan: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
   };
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
   };
 
-  const formatAmount = (amount, decimals) => {
-    if (!amount) return '0';
-    return ethers.utils.formatUnits(amount, decimals);
-  };
-
-  const getTokenSymbol = (address) => {
-    const token = mockTokens.find(t => t.address === address);
-    return token ? token.symbol : 'Unknown';
-  };
-
-  const getTokenDecimals = (address) => {
-    const token = mockTokens.find(t => t.address === address);
-    return token ? token.decimals : 18;
-  };
-
   const getStatusChip = (status) => {
-    let color = 'default';
-    
     switch (status) {
       case 'PENDING':
-        color = 'warning';
-        break;
+        return <Chip label="Pending" color="primary" size="small" />;
       case 'ACTIVE':
-        color = 'success';
-        break;
+        return <Chip label="Active" color="success" size="small" />;
       case 'REPAID':
-        color = 'info';
-        break;
+        return <Chip label="Repaid" color="default" size="small" />;
       case 'LIQUIDATED':
-        color = 'error';
-        break;
+        return <Chip label="Liquidated" color="error" size="small" />;
       case 'CANCELLED':
-        color = 'default';
-        break;
+        return <Chip label="Cancelled" color="warning" size="small" />;
       default:
-        color = 'default';
+        return <Chip label={status} size="small" />;
     }
-    
-    return <Chip label={status} color={color} size="small" />;
   };
 
   const getRemainingTime = (startTime, duration) => {
-    const endTime = startTime + duration;
     const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
+    const endTime = startTime + duration;
+    const remainingSeconds = endTime - now;
     
-    if (remaining <= 0) {
+    if (remainingSeconds <= 0) {
       return 'Expired';
     }
     
-    const days = Math.floor(remaining / (24 * 60 * 60));
-    const hours = Math.floor((remaining % (24 * 60 * 60)) / (60 * 60));
+    const days = Math.floor(remainingSeconds / (24 * 60 * 60));
+    const hours = Math.floor((remainingSeconds % (24 * 60 * 60)) / (60 * 60));
     
-    return `${days}d ${hours}h`;
+    return `${days}d ${hours}h remaining`;
   };
 
   return (
@@ -308,12 +298,21 @@ const MyOrders = () => {
               Connect Wallet
             </Button>
           </Paper>
+        ) : supportedTokens.length === 0 ? (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body1" paragraph>
+              No supported tokens found for the current network (Chain ID: {chainId}).
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Please switch to a supported network.
+            </Typography>
+          </Paper>
         ) : (
           <>
             <Paper sx={{ p: 3, mb: 3 }}>
               <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
-                <Tab label="My Lending" />
-                <Tab label="My Borrowing" />
+                <Tab label="My Lending Orders" />
+                <Tab label="My Borrowing Orders" />
               </Tabs>
 
               {tabValue === 0 ? (
@@ -333,33 +332,36 @@ const MyOrders = () => {
                       <Table>
                         <TableHead>
                           <TableRow>
-                            <TableCell>ID</TableCell>
                             <TableCell>Lend</TableCell>
                             <TableCell>Collateral</TableCell>
-                            <TableCell>Interest</TableCell>
+                            <TableCell>Interest Rate</TableCell>
+                            <TableCell>Duration</TableCell>
                             <TableCell>Status</TableCell>
-                            <TableCell>Remaining</TableCell>
                             <TableCell>Action</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {lendingOrders.map((order) => (
                             <TableRow key={order.id}>
-                              <TableCell>{order.id}</TableCell>
                               <TableCell>
-                                {formatAmount(order.lendAmount, getTokenDecimals(order.lendToken))} {getTokenSymbol(order.lendToken)}
+                                {formatTokenAmount(order.lendToken, order.lendAmount)} {getTokenSymbol(order.lendToken)}
                               </TableCell>
                               <TableCell>
-                                {formatAmount(order.collateralAmount, getTokenDecimals(order.collateralToken))} {getTokenSymbol(order.collateralToken)}
+                                {formatTokenAmount(order.collateralToken, order.collateralAmount)} {getTokenSymbol(order.collateralToken)}
                               </TableCell>
                               <TableCell>
                                 {order.interestRate / 100}%
                               </TableCell>
                               <TableCell>
-                                {getStatusChip(order.status)}
+                                {order.duration / (24 * 60 * 60)} days
+                                {order.startTime && order.status === 'ACTIVE' && (
+                                  <Typography variant="caption" display="block" color="text.secondary">
+                                    {getRemainingTime(order.startTime, order.duration)}
+                                  </Typography>
+                                )}
                               </TableCell>
                               <TableCell>
-                                {order.status === 'ACTIVE' ? getRemainingTime(order.startTime, order.duration) : '-'}
+                                {getStatusChip(order.status)}
                               </TableCell>
                               <TableCell>
                                 {order.status === 'PENDING' && (
@@ -398,40 +400,42 @@ const MyOrders = () => {
                       <Table>
                         <TableHead>
                           <TableRow>
-                            <TableCell>ID</TableCell>
                             <TableCell>Borrowed</TableCell>
                             <TableCell>Collateral</TableCell>
-                            <TableCell>Interest</TableCell>
+                            <TableCell>Interest Rate</TableCell>
+                            <TableCell>Duration</TableCell>
                             <TableCell>Status</TableCell>
-                            <TableCell>Remaining</TableCell>
                             <TableCell>Action</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {borrowingOrders.map((order) => (
                             <TableRow key={order.id}>
-                              <TableCell>{order.id}</TableCell>
                               <TableCell>
-                                {formatAmount(order.lendAmount, getTokenDecimals(order.lendToken))} {getTokenSymbol(order.lendToken)}
+                                {formatTokenAmount(order.lendToken, order.lendAmount)} {getTokenSymbol(order.lendToken)}
                               </TableCell>
                               <TableCell>
-                                {formatAmount(order.collateralAmount, getTokenDecimals(order.collateralToken))} {getTokenSymbol(order.collateralToken)}
+                                {formatTokenAmount(order.collateralToken, order.collateralAmount)} {getTokenSymbol(order.collateralToken)}
                               </TableCell>
                               <TableCell>
                                 {order.interestRate / 100}%
                               </TableCell>
                               <TableCell>
-                                {getStatusChip(order.status)}
+                                {order.duration / (24 * 60 * 60)} days
+                                {order.startTime && order.status === 'ACTIVE' && (
+                                  <Typography variant="caption" display="block" color="text.secondary">
+                                    {getRemainingTime(order.startTime, order.duration)}
+                                  </Typography>
+                                )}
                               </TableCell>
                               <TableCell>
-                                {order.status === 'ACTIVE' ? getRemainingTime(order.startTime, order.duration) : '-'}
+                                {getStatusChip(order.status)}
                               </TableCell>
                               <TableCell>
                                 {order.status === 'ACTIVE' && (
                                   <Button
                                     variant="contained"
                                     size="small"
-                                    color="primary"
                                     onClick={() => handleRepayLoan(order.id)}
                                     disabled={loading}
                                   >
