@@ -600,6 +600,118 @@ contract P2PLendingMarketplace is Ownable, ReentrancyGuard, EIP712, Pausable {
         emit OnchainOrderStatusChanged(_orderId, OrderStatus.CANCELLED);
     }
 
+    /**
+     * @dev 取消未成交的链下订单
+     * @param _lender 出借人地址
+     * @param _lendToken 借出的代币地址
+     * @param _lendAmount 借出金额
+     * @param _collateralToken 抵押的代币地址
+     * @param _collateralAmount 抵押金额
+     * @param _interestRate 利率（基点）
+     * @param _duration 借款期限（秒）
+     * @param _expiry 过期时间
+     * @param _nonce 随机数
+     */
+    function cancelOffchainOrder(
+        address _lender,
+        address _lendToken,
+        uint256 _lendAmount,
+        address _collateralToken,
+        uint256 _collateralAmount,
+        uint256 _interestRate,
+        uint256 _duration,
+        uint256 _expiry,
+        uint256 _nonce
+    ) external nonReentrant whenNotPaused {
+        // 验证调用者是订单创建者
+        require(_lender == msg.sender, "Only lender can cancel");
+        
+        // 计算订单哈希
+        bytes32 orderHash = createOffchainOrderHash(
+            _lender,
+            _lendToken,
+            _lendAmount,
+            _collateralToken,
+            _collateralAmount,
+            _interestRate,
+            _duration,
+            _expiry,
+            _nonce
+        );
+        
+        // 确保订单未被处理
+        require(!processedOffchainOrder[orderHash], "Order already processed");
+        
+        // 确保订单状态为PENDING或未初始化
+        require(offchainOrderStatus[orderHash] == OrderStatus.PENDING || 
+                offchainOrderStatus[orderHash] == OrderStatus(0), "Order is not pending");
+        
+        // 标记订单为已处理并取消
+        processedOffchainOrder[orderHash] = true;
+        offchainOrderStatus[orderHash] = OrderStatus.CANCELLED;
+        
+        emit OffchainOrderStatusChanged(orderHash, OrderStatus.CANCELLED);
+    }
+
+    /**
+     * @dev 取消未成交的池订单
+     * @param _pool 借贷池地址
+     * @param _lendToken 借出的代币地址
+     * @param _lendAmount 借出金额
+     * @param _collateralToken 抵押的代币地址
+     * @param _collateralAmount 抵押金额
+     * @param _interestRate 利率（基点）
+     * @param _duration 借款期限（秒）
+     * @param _expiry 过期时间
+     * @param _nonce 随机数
+     */
+    function cancelPoolOrder(
+        address _pool,
+        address _lendToken,
+        uint256 _lendAmount,
+        address _collateralToken,
+        uint256 _collateralAmount,
+        uint256 _interestRate,
+        uint256 _duration,
+        uint256 _expiry,
+        uint256 _nonce
+    ) external nonReentrant whenNotPaused {
+        // 验证调用者是池管理员或合约所有者
+        require(
+            ILendingPool(_pool).isPoolAdmin(msg.sender) || owner() == msg.sender,
+            "Only pool admin or contract owner can cancel"
+        );
+        
+        // 计算订单哈希
+        bytes32 orderHash = createOffchainOrderHash(
+            _pool,
+            _lendToken,
+            _lendAmount,
+            _collateralToken,
+            _collateralAmount,
+            _interestRate,
+            _duration,
+            _expiry,
+            _nonce
+        );
+        
+        // 确保订单未被处理
+        require(!processedOffchainOrder[orderHash], "Order already processed");
+        
+        // 确保订单状态为PENDING或未初始化
+        require(offchainOrderStatus[orderHash] == OrderStatus.PENDING || 
+                offchainOrderStatus[orderHash] == OrderStatus(0), "Order is not pending");
+        
+        // 标记订单为已处理并取消
+        processedOffchainOrder[orderHash] = true;
+        offchainOrderStatus[orderHash] = OrderStatus.CANCELLED;
+        
+        // 记录出借池，以便将来可以查询
+        offchainOrderPools[orderHash] = _pool;
+        
+        emit OffchainOrderStatusChanged(orderHash, OrderStatus.CANCELLED);
+    }
+
     // 计算利息
     function calculateInterest(
         uint256 _lendAmount,
