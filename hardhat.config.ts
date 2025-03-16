@@ -7,6 +7,9 @@ import * as dotenv from "dotenv";
 // 导入自定义任务
 import "./tasks/send-test-eth";
 import "./tasks/mint-test-tokens";
+import "./tasks/update-frontend-config";
+import "./tasks/deploy-and-update";
+import "./tasks/deploy-update-mint";
 
 dotenv.config();
 

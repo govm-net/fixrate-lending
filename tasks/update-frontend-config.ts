@@ -1,25 +1,31 @@
-const fs = require('fs');
-const path = require('path');
+import { task } from "hardhat/config";
+import fs from "fs";
+import path from "path";
 
 // 配置
-const DEPLOYMENTS_DIR = path.join(__dirname, '../deployments');
-const FRONTEND_CONFIG_PATH = path.join(__dirname, '../frontend/src/utils/networkConfig.js');
+const FRONTEND_CONFIG_PATH = path.join(__dirname, "../frontend/src/utils/networkConfig.js");
 
 // 网络ID映射
-const NETWORK_ID_MAP = {
+const NETWORK_ID_MAP: { [key: string]: number } = {
   'localhost': 31337,
   'hardhat': 31337,
-  'ganache': 1337
+  'ganache': 1337,
+  'sepolia': 11155111,
+  'mumbai': 80001,
+  'bsc_testnet': 97,
+  'mainnet': 1,
+  'polygon': 137,
+  'bsc': 56
 };
 
 // 主要合约名称
-const MAIN_CONTRACTS = {
+const MAIN_CONTRACTS: { [key: string]: string } = {
   'P2PLendingMarketplace': 'marketplace',
   'FixedRateLendingPool': 'lendingPool'
 };
 
 // 代币信息
-const TOKEN_INFO = {
+const TOKEN_INFO: { [key: string]: { name: string, decimals: number } } = {
   'USDC': { name: 'USD Coin', decimals: 6 },
   'DAI': { name: 'Dai Stablecoin', decimals: 18 },
   'WETH': { name: 'Wrapped Ether', decimals: 18 },
@@ -27,8 +33,8 @@ const TOKEN_INFO = {
 };
 
 // 读取部署信息
-function readDeploymentInfo(networkName) {
-  const networkDir = path.join(DEPLOYMENTS_DIR, networkName);
+function readDeploymentInfo(deploymentsDir: string, networkName: string) {
+  const networkDir = path.join(deploymentsDir, networkName);
   
   if (!fs.existsSync(networkDir)) {
     console.log(`网络 ${networkName} 的部署信息不存在`);
@@ -36,8 +42,8 @@ function readDeploymentInfo(networkName) {
   }
   
   const deploymentInfo = {
-    contracts: {},
-    tokens: {}
+    contracts: {} as { [key: string]: string },
+    tokens: {} as { [key: string]: string }
   };
   
   // 读取主要合约地址
@@ -53,18 +59,33 @@ function readDeploymentInfo(networkName) {
   }
   
   // 读取代币合约地址
-  const mockERC20Files = fs.readdirSync(networkDir)
-    .filter(file => file.startsWith('MockERC20') && file.endsWith('.json'));
+  const files = fs.readdirSync(networkDir);
   
-  console.log(`找到 ${mockERC20Files.length} 个MockERC20合约文件`);
+  // 查找 MockUSDC, MockDAI, MockWETH, MockWBTC
+  const mockTokens = ['MockUSDC', 'MockDAI', 'MockWETH', 'MockWBTC'];
+  for (const tokenName of mockTokens) {
+    const tokenFile = files.find(file => file.startsWith(tokenName) && file.endsWith('.json'));
+    if (tokenFile) {
+      const tokenData = JSON.parse(fs.readFileSync(path.join(networkDir, tokenFile), 'utf8'));
+      const symbol = tokenName.replace('Mock', '');
+      deploymentInfo.tokens[symbol] = tokenData.address;
+      console.log(`找到代币 ${symbol}: ${tokenData.address}`);
+    }
+  }
   
-  for (const file of mockERC20Files) {
-    const contractData = JSON.parse(fs.readFileSync(path.join(networkDir, file), 'utf8'));
-    if (contractData.args && contractData.args.length >= 2) {
-      const symbol = contractData.args[1];
-      if (TOKEN_INFO[symbol]) {
-        deploymentInfo.tokens[symbol] = contractData.address;
-        console.log(`找到代币 ${symbol}: ${contractData.address}`);
+  // 如果没有找到特定命名的代币，尝试从 MockERC20 文件中查找
+  if (Object.keys(deploymentInfo.tokens).length === 0) {
+    const mockERC20Files = files.filter(file => file.startsWith('MockERC20') && file.endsWith('.json'));
+    console.log(`找到 ${mockERC20Files.length} 个MockERC20合约文件`);
+    
+    for (const file of mockERC20Files) {
+      const contractData = JSON.parse(fs.readFileSync(path.join(networkDir, file), 'utf8'));
+      if (contractData.args && contractData.args.length >= 2) {
+        const symbol = contractData.args[1];
+        if (TOKEN_INFO[symbol]) {
+          deploymentInfo.tokens[symbol] = contractData.address;
+          console.log(`找到代币 ${symbol}: ${contractData.address}`);
+        }
       }
     }
   }
@@ -73,7 +94,7 @@ function readDeploymentInfo(networkName) {
 }
 
 // 更新前端配置
-function updateFrontendConfig(networkName, deploymentInfo) {
+function updateFrontendConfig(networkName: string, deploymentInfo: { contracts: { [key: string]: string }, tokens: { [key: string]: string } }) {
   const chainId = NETWORK_ID_MAP[networkName];
   if (!chainId) {
     console.log(`未找到网络 ${networkName} 的链ID映射`);
@@ -181,29 +202,29 @@ function updateFrontendConfig(networkName, deploymentInfo) {
   console.log(`已更新 ${networkName} 网络的配置`);
 }
 
-// 主函数
-function main() {
-  // 获取命令行参数
-  const args = process.argv.slice(2);
-  const networkName = args[0] || 'localhost'; // 默认为localhost网络
-  
-  console.log(`开始更新 ${networkName} 网络的前端配置...`);
-  
-  // 读取部署信息
-  const deploymentInfo = readDeploymentInfo(networkName);
-  
-  if (!deploymentInfo) {
-    console.log('未找到部署信息，退出更新');
-    process.exit(1);
-  }
-  
-  console.log(`\n找到部署信息:`, JSON.stringify(deploymentInfo, null, 2));
-  
-  // 更新前端配置
-  updateFrontendConfig(networkName, deploymentInfo);
-  
-  console.log('\n前端配置已更新!');
-}
-
-// 执行主函数
-main(); 
+task("update-frontend-config", "更新前端配置文件中的合约地址")
+  .addOptionalParam("net", "要更新的网络名称", "localhost")
+  .setAction(async (taskArgs, hre) => {
+    const { network } = hre;
+    const networkName = taskArgs.net || network.name;
+    
+    console.log(`开始更新 ${networkName} 网络的前端配置...`);
+    
+    // 获取部署目录路径
+    const deploymentsDir = path.join(__dirname, "../deployments");
+    
+    // 读取部署信息
+    const deploymentInfo = readDeploymentInfo(deploymentsDir, networkName);
+    
+    if (!deploymentInfo) {
+      console.log('未找到部署信息，退出更新');
+      return;
+    }
+    
+    console.log(`\n找到部署信息:`, JSON.stringify(deploymentInfo, null, 2));
+    
+    // 更新前端配置
+    updateFrontendConfig(networkName, deploymentInfo);
+    
+    console.log('\n前端配置已更新!');
+  }); 
