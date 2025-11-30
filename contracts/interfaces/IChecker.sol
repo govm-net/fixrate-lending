@@ -27,14 +27,14 @@ interface IChecker {
      * @param params 验证参数
      * @return 是否有效
      */
-    function verifyLenderOrder(VerificationParams calldata params) external view returns (bool);
+    function verifyLenderOrder(VerificationParams calldata params) external returns (bool);
 
     /**
      * @dev 验证借款人订单有效性
      * @param params 验证参数
      * @return 是否有效
      */
-    function verifyBorrowerOrder(VerificationParams calldata params) external view returns (bool);
+    function verifyBorrowerOrder(VerificationParams calldata params) external returns (bool);
 
     /**
      * @dev 获取Checker信息

@@ -7,8 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "./interfaces/ILendingPool.sol";
 import "./interfaces/AggregatorV3Interface.sol";
+import "./interfaces/IChecker.sol";
 
 // LP Token 合约实现
 contract LPToken is ERC20 {
@@ -38,10 +38,10 @@ contract LPToken is ERC20 {
 
 /**
  * @title FixedRateLendingPool
- * @dev 固定利率借贷池，实现ILendingPool接口，可与UnifiedMatchingEngine集成
+ * @dev 固定利率借贷池，实现IChecker接口，可与UnifiedMatchingEngine集成
  * 增加了ERC20 LP Token功能，用户存款后会获得代表其份额的LP Token
  */
-contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
+contract FixedRateLendingPool is Ownable, ReentrancyGuard, IChecker {
     using SafeERC20 for IERC20;
 
     // LP Token 合约
@@ -76,22 +76,6 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     event PriceFeedUpdated(address indexed token, address indexed priceFeed);
     event Deposited(address indexed token, address indexed depositor, uint256 amount);
     event Withdrawn(address indexed token, address indexed withdrawer, uint256 amount);
-    event LoanIssued(
-        bytes32 indexed orderHash,
-        address indexed borrower,
-        address lendToken,
-        uint256 lendAmount,
-        address collateralToken,
-        uint256 collateralAmount,
-        uint256 interestRate,
-        uint256 duration
-    );
-    event LoanRepaid(
-        bytes32 indexed orderHash,
-        address indexed borrower,
-        address lendToken,
-        uint256 repayAmount
-    );
     event PoolParamsUpdated(
         uint256 minInterestRate,
         uint256 maxLoanDuration,
@@ -315,7 +299,7 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         uint256 interestRate,
         uint256 duration,
         address borrower
-    ) external view override returns (bool) {
+    ) public view returns (bool) {
         borrower;
         // 检查代币是否支持
         if (!supportedTokens[lendToken] || !supportedTokens[collateralToken]) {
@@ -363,101 +347,6 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     }
 
     /**
-     * @dev 从池中借出资金
-     * @param lendToken 借出的代币地址
-     * @param lendAmount 借出金额
-     * @param collateralToken 抵押的代币地址
-     * @param collateralAmount 抵押金额
-     * @param interestRate 利率（基点）
-     * @param duration 借款期限（秒）
-     * @param borrower 借款人地址
-     * @param orderHash 订单哈希
-     * @return 是否成功
-     */
-    function lendFromPool(
-        address lendToken,
-        uint256 lendAmount,
-        address collateralToken,
-        uint256 collateralAmount,
-        uint256 interestRate,
-        uint256 duration,
-        address borrower,
-        bytes32 orderHash
-    ) external override nonReentrant onlyMatchingEngine returns (bool) {
-        require(!activeOrders[orderHash], "Order already exists");
-        // 检查订单是否可行
-        require(
-            this.checkOrder(
-                lendToken,
-                lendAmount,
-                collateralToken,
-                collateralAmount,
-                interestRate,
-                duration,
-                borrower
-            ),
-            "Order not acceptable"
-        );
-        
-        // 标记订单为活跃
-        activeOrders[orderHash] = true;
-        
-        // 更新借出金额
-        totalBorrowed[lendToken] += lendAmount;
-        
-        // 转移代币给借款人
-        IERC20(lendToken).safeTransfer(borrower, lendAmount);
-        
-        emit LoanIssued(
-            orderHash,
-            borrower,
-            lendToken,
-            lendAmount,
-            collateralToken,
-            collateralAmount,
-            interestRate,
-            duration
-        );
-        
-        return true;
-    }
-
-    /**
-     * @dev 向池中还款
-     * @param lendToken 借出的代币地址
-     * @param repayAmount 还款金额（本金+利息）
-     * @param orderHash 订单哈希
-     * @param borrower 借款人地址
-     * @return 是否成功
-     */
-    function repayToPool(
-        address lendToken,
-        uint256 repayAmount,
-        bytes32 orderHash,
-        address borrower
-    ) external override nonReentrant onlyMatchingEngine returns (bool) {
-        // 验证订单哈希是否存在且活跃
-        require(activeOrders[orderHash], "Order not found or not active");
-        
-        // 验证代币是否支持
-        require(supportedTokens[lendToken], "Token not supported");
-        
-        // 更新池余额（本金已经在池余额中，只需减少借出金额）
-        if (repayAmount > totalBorrowed[lendToken]) {
-            totalBorrowed[lendToken] = 0;
-        } else {
-            totalBorrowed[lendToken] -= repayAmount;
-        }
-        
-        // 标记订单为非活跃
-        activeOrders[orderHash] = false;
-        
-        emit LoanRepaid(orderHash, borrower, lendToken, repayAmount);
-        
-        return true;
-    }
-
-    /**
      * @dev 获取池中可用余额
      * @param _token 代币地址
      * @return 可用余额
@@ -490,5 +379,55 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
             return 0;
         }
         return LPToken(lpTokenAddress).balanceOf(_user);
+    }
+    
+    /**
+     * @dev 验证出借人订单有效性并转移代币到撮合引擎
+     * @param params 验证参数
+     * @return 是否有效
+     */
+    function verifyLenderOrder(VerificationParams calldata params) external onlyMatchingEngine returns (bool) {
+        // 直接调用checkOrder函数验证订单
+        bool isValid;
+        try this.checkOrder(
+            params.lendToken,
+            params.lendAmount,
+            params.collateralToken,
+            params.collateralAmount,
+            params.interestRate,
+            params.duration,
+            params.borrower
+        ) returns (bool result) {
+            isValid = result;
+        } catch {
+            isValid = false;
+        }
+        
+        if (isValid) {
+            // 允许撮合引擎转移代币
+            IERC20(params.lendToken).approve(msg.sender, params.lendAmount);
+        }
+        
+        return isValid;
+    }
+
+    /**
+     * @dev 验证借款人订单有效性
+     * @param params 验证参数
+     * @return 是否有效
+     */
+    function verifyBorrowerOrder(VerificationParams calldata params) external view onlyMatchingEngine returns (bool) {
+        // 对于池化资金，借款人订单总是无效的（池化资金只能作为出借方）
+        params;
+        return false;
+    }
+
+    /**
+     * @dev 获取Checker信息
+     * @return name Checker名称
+     * @return version Checker版本
+     */
+    function getCheckerInfo() external pure returns (string memory name, string memory version) {
+        return ("FixedRateLendingPool", "1.0.0");
     }
 }

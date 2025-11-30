@@ -4,8 +4,8 @@ const { ethers } = require("hardhat");
 describe("UnifiedMatchingEngine", function () {
   let unifiedMatching;
   let personalChecker;
-  let poolChecker;
-  let lendingPool;
+  let poolChecker; // 这个名字现在指的是FixedRateLendingPool合约
+  let lendingPool; // 这个名字现在指的是FixedRateLendingPool合约
   let tokenA;
   let tokenB;
   let owner;
@@ -37,7 +37,7 @@ describe("UnifiedMatchingEngine", function () {
     const PersonalChecker = await ethers.getContractFactory("PersonalChecker");
     personalChecker = await PersonalChecker.deploy();
 
-    // First deploy a mock lending pool
+    // Deploy FixedRateLendingPool (which now also acts as PoolChecker)
     const FixedRateLendingPool = await ethers.getContractFactory("FixedRateLendingPool");
     lendingPool = await FixedRateLendingPool.deploy(
       500, // minInterestRate (5%)
@@ -45,9 +45,8 @@ describe("UnifiedMatchingEngine", function () {
       15000 // minCollateralRatio (150%)
     );
 
-    // 部署 PoolChecker with the lending pool address
-    const PoolChecker = await ethers.getContractFactory("PoolChecker");
-    poolChecker = await PoolChecker.deploy(await lendingPool.getAddress());
+    // Set poolChecker to point to the lendingPool (which now also acts as PoolChecker)
+    poolChecker = lendingPool;
 
     // 授权 PersonalChecker 和 PoolChecker
     await unifiedMatching.authorizeChecker(await personalChecker.getAddress());
