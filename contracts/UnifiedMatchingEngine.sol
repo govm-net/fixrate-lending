@@ -51,6 +51,9 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
     
     // 授权的Checker合约映射
     mapping(address => bool) public authorizedCheckers;
+    
+    // 订单真实到期时间映射
+    mapping(bytes32 => uint256) public orderMaturities;
 
     // 事件
     event BorrowRequestInitiated(
@@ -99,6 +102,11 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         uint256 lendAmount,
         address collateralToken,
         uint256 collateralAmount
+    );
+    
+    event OrderMaturitySet(
+        bytes32 indexed orderHash,
+        uint256 maturityTime
     );
     
     event OrderCancelled(
@@ -294,6 +302,10 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         // 更新订单状态
         orderStatus[orderHash] = OrderStatus.ACTIVE;
         
+        // 记录订单真实到期时间
+        uint256 maturityTime = block.timestamp + order.duration;
+        orderMaturities[orderHash] = maturityTime;
+        
         emit BorrowExecuted(
             orderHash,
             order.borrower,
@@ -303,6 +315,8 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
             order.collateralToken,
             order.collateralAmount
         );
+        
+        emit OrderMaturitySet(orderHash, maturityTime);
     }
 
     /**
@@ -358,6 +372,10 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         // 更新订单状态
         orderStatus[orderHash] = OrderStatus.ACTIVE;
         
+        // 记录订单真实到期时间
+        uint256 maturityTime = block.timestamp + order.duration;
+        orderMaturities[orderHash] = maturityTime;
+        
         emit LendExecuted(
             orderHash,
             order.lender,
@@ -367,6 +385,8 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
             order.collateralToken,
             order.collateralAmount
         );
+        
+        emit OrderMaturitySet(orderHash, maturityTime);
     }
 
     /**
@@ -430,9 +450,12 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         // 验证订单状态
         require(orderStatus[orderHash] == OrderStatus.ACTIVE, "Order not active");
         
+        // 获取订单真实到期时间
+        uint256 maturityTime = orderMaturities[orderHash];
+        require(maturityTime > 0, "Order maturity not set");
+        
         // 验证是否逾期
-        // 这里简化处理，实际应用中需要根据具体的借款开始时间和期限来判断
-        require(block.timestamp > order.expiry, "Loan not yet overdue");
+        require(block.timestamp > maturityTime, "Loan not yet overdue");
         
         // 将抵押品转给出借人
         IERC20(order.collateralToken).safeTransfer(order.lender, order.collateralAmount);

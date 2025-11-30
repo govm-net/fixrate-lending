@@ -25,6 +25,11 @@ contract PersonalChecker is IChecker, EIP712 {
      * @return 是否有效
      */
     function verifyLenderOrder(VerificationParams calldata params) external view override returns (bool) {
+        // 检查订单是否过期
+        if (block.timestamp > params.expiry) {
+            return false;
+        }
+        
         // 验证出借人签名
         bytes32 orderHash = _hashTypedDataV4(keccak256(abi.encode(
             LOAN_ORDER_TYPEHASH,
@@ -51,6 +56,11 @@ contract PersonalChecker is IChecker, EIP712 {
      * @return 是否有效
      */
     function verifyBorrowerOrder(VerificationParams calldata params) external view override returns (bool) {
+        // 检查订单是否过期
+        if (block.timestamp > params.expiry) {
+            return false;
+        }
+        
         // 验证借款人签名
         bytes32 orderHash = _hashTypedDataV4(keccak256(abi.encode(
             LOAN_ORDER_TYPEHASH,
@@ -76,7 +86,7 @@ contract PersonalChecker is IChecker, EIP712 {
      * @return name Checker名称
      * @return version Checker版本
      */
-    function getCheckerInfo() external view override returns (string memory name, string memory version) {
+    function getCheckerInfo() external pure override returns (string memory name, string memory version) {
         return ("PersonalChecker", "1.0.0");
     }
 }
