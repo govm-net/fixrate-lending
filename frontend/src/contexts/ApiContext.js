@@ -4,12 +4,12 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const DEFAULT_API_ENDPOINTS = [
   {
     name: 'Mainnet API',
-    url: 'https://api.p2plending.example.com',
+    url: 'https://api.fixratelending.example.com',
     chainId: 1
   },
   {
     name: 'Goerli Testnet API',
-    url: 'https://testnet-api.p2plending.example.com',
+    url: 'https://testnet-api.fixratelending.example.com',
     chainId: 5
   },
   {
@@ -44,57 +44,16 @@ export const ApiProvider = ({ children }) => {
     localStorage.setItem('selectedEndpoint', JSON.stringify(selectedEndpoint));
   }, [selectedEndpoint]);
 
-  // Add a new API endpoint
-  const addApiEndpoint = (endpoint) => {
-    setApiEndpoints([...apiEndpoints, endpoint]);
-  };
-
-  // Remove an API endpoint
-  const removeApiEndpoint = (index) => {
-    const newEndpoints = [...apiEndpoints];
-    newEndpoints.splice(index, 1);
-    setApiEndpoints(newEndpoints);
-    
-    // If the selected endpoint was removed, select the first one
-    if (selectedEndpoint === apiEndpoints[index]) {
-      setSelectedEndpoint(newEndpoints[0]);
-    }
-  };
-
-  // Update an existing API endpoint
-  const updateApiEndpoint = (index, endpoint) => {
-    const newEndpoints = [...apiEndpoints];
-    newEndpoints[index] = endpoint;
-    setApiEndpoints(newEndpoints);
-    
-    // If the selected endpoint was updated, update the selection
-    if (selectedEndpoint === apiEndpoints[index]) {
-      setSelectedEndpoint(endpoint);
-    }
-  };
-
-  // Reset to default API endpoints
-  const resetApiEndpoints = () => {
-    setApiEndpoints(DEFAULT_API_ENDPOINTS);
-    setSelectedEndpoint(DEFAULT_API_ENDPOINTS[0]);
-  };
-
   return (
     <ApiContext.Provider
       value={{
         apiEndpoints,
+        setApiEndpoints,
         selectedEndpoint,
-        setSelectedEndpoint,
-        addApiEndpoint,
-        removeApiEndpoint,
-        updateApiEndpoint,
-        resetApiEndpoints
+        setSelectedEndpoint
       }}
     >
       {children}
     </ApiContext.Provider>
   );
 };
-
-// Custom hook to use the API context
-export const useApi = () => useContext(ApiContext); 

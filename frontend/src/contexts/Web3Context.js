@@ -5,11 +5,13 @@ import { useApi } from './ApiContext';
 // 导入网络配置
 import { getContractAddresses, getSupportedTokens, getNetworkConfig } from '../utils/networkConfig';
 // 导入测试钱包工具
-// ... existing code ...
+import { getTestWallet } from '../utils/testWallet';
 
 // ABI imports
-import P2PLendingMarketplaceABI from '../utils/abis/P2PLendingMarketplace.json';
+import UnifiedMatchingEngineABI from '../utils/abis/UnifiedMatchingEngine.json';
 import FixedRateLendingPoolABI from '../utils/abis/FixedRateLendingPool.json';
+import FixedRateLendingPoolWithLPABI from '../utils/abis/FixedRateLendingPoolWithLP.json';
+import LiquidityMiningABI from '../utils/abis/LiquidityMining.json';
 import ERC20ABI from '../utils/abis/ERC20.json';
 
 export const Web3Context = createContext();
@@ -22,429 +24,250 @@ export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [chainId, setChainId] = useState(null);
   const [contracts, setContracts] = useState({
-    marketplace: null,
-    lendingPool: null
+    matchingEngine: null,
+    lendingPool: null,
+    lendingPoolWithLP: null,
+    liquidityMining: null
   });
   const [contractAddresses, setContractAddresses] = useState({
-    marketplace: null,
-    lendingPool: null
+    matchingEngine: null,
+    lendingPool: null,
+    lendingPoolWithLP: null
   });
   const [supportedTokens, setSupportedTokens] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [error, setError] = useState(null);
-  // ... existing code ...
 
-  // 安全地获取 ethereum 对象
-  const getEthereum = () => {
-    if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
-      return window.ethereum;
-    }
-    return null;
-  };
-
-  // Initialize provider
-  useEffect(() => {
-    const ethereum = getEthereum();
-    if (ethereum) {
-      try {
-        const provider = new ethers.providers.Web3Provider(ethereum);
-        setProvider(provider);
-
-        // Listen for account changes
-        const handleAccountsChanged = (accounts) => {
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);
-          } else {
-            setAccount(null);
-            setIsConnected(false);
-          }
-        };
-
-        // Listen for chain changes
-        const handleChainChanged = (chainId) => {
-          setChainId(parseInt(chainId, 16));
-          // Reload the page when chain changes
-          window.location.reload();
-        };
-
-        ethereum.on('accountsChanged', handleAccountsChanged);
-        ethereum.on('chainChanged', handleChainChanged);
-
-        // Get initial chain ID
-        provider.getNetwork().then(network => {
-          setChainId(network.chainId);
-        });
-
-        return () => {
-          if (ethereum.removeListener) {
-            ethereum.removeListener('accountsChanged', handleAccountsChanged);
-            ethereum.removeListener('chainChanged', handleChainChanged);
-          }
-        };
-      } catch (error) {
-        console.error('Error initializing Web3Provider:', error);
-        setError('Failed to initialize Web3Provider');
-      }
-    } else {
-      // 如果没有 MetaMask，尝试使用 JsonRpcProvider 连接到本地网络
-      try {
-        const localProvider = new ethers.providers.JsonRpcProvider('http://localhost:8545');
-        setProvider(localProvider);
+  // 初始化钱包提供商
+  const initWalletProvider = async () => {
+    try {
+      // 检查是否在浏览器环境中且有以太坊提供商
+      if (typeof window !== 'undefined' && window.ethereum) {
+        // 请求用户授权连接钱包
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        // 创建新的提供商实例
+        const newProvider = new ethers.BrowserProvider(window.ethereum);
+        setProvider(newProvider);
+        
+        // 获取签名者
+        const newSigner = await newProvider.getSigner();
+        setSigner(newSigner);
+        
+        // 获取账户地址
+        const newAccount = await newSigner.getAddress();
+        setAccount(newAccount);
         
         // 获取网络信息
-        localProvider.getNetwork().then(network => {
-          setChainId(network.chainId);
-        });
-      } catch (error) {
-        console.error('Error connecting to local network:', error);
-      }
-    }
-  }, []);
-
-  // 当链 ID 变化时，更新合约地址和支持的代币
-  useEffect(() => {
-    if (chainId) {
-      // 从网络配置中获取合约地址
-      const addresses = getContractAddresses(chainId);
-      setContractAddresses(addresses);
-      
-      // 从网络配置中获取支持的代币
-      const tokens = getSupportedTokens(chainId);
-      setSupportedTokens(tokens);
-    }
-  }, [chainId]);
-
-  // Initialize contracts when provider and addresses are available
-  useEffect(() => {
-    if (provider && contractAddresses.marketplace && contractAddresses.lendingPool) {
-      const marketplace = new ethers.Contract(
-        contractAddresses.marketplace,
-        P2PLendingMarketplaceABI,
-        provider
-      );
-      
-      const lendingPool = new ethers.Contract(
-        contractAddresses.lendingPool,
-        FixedRateLendingPoolABI,
-        provider
-      );
-
-      setContracts({
-        marketplace,
-        lendingPool
-      });
-    }
-  }, [provider, contractAddresses]);
-
-  // 当 signer 变化时，更新合约连接
-  useEffect(() => {
-    if (signer && contracts.marketplace && contracts.lendingPool) {
-      // 避免在已经连接 signer 的情况下重复连接
-      if (contracts.marketplace.signer !== signer || contracts.lendingPool.signer !== signer) {
-        const marketplaceWithSigner = contracts.marketplace.connect(signer);
-        const lendingPoolWithSigner = contracts.lendingPool.connect(signer);
-
-        setContracts({
-          marketplace: marketplaceWithSigner,
-          lendingPool: lendingPoolWithSigner
-        });
-      }
-    }
-  }, [signer, contracts.marketplace, contracts.lendingPool]);
-
-  // Connect wallet
-  const connectWallet = async () => {
-    const ethereum = getEthereum();
-    if (!ethereum) {
-      setError('MetaMask is not installed');
-      return;
-    }
-
-    setIsConnecting(true);
-    setError(null);
-
-    try {
-      const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-      
-      if (accounts.length > 0) {
-        setAccount(accounts[0]);
-        const provider = new ethers.providers.Web3Provider(ethereum);
-        const signer = provider.getSigner();
-        setSigner(signer);
-        setIsConnected(true);
+        const network = await newProvider.getNetwork();
+        setChainId(Number(network.chainId));
         
-        // 获取当前网络ID
-        const network = await provider.getNetwork();
-        const currentChainId = network.chainId;
-        console.log(`Connected to network with chain ID: ${currentChainId}`);
-        console.log(`Selected endpoint: `, selectedEndpoint);
+        // 监听账户变化
+        window.ethereum.on('accountsChanged', handleAccountsChanged);
         
-        // 如果当前选择的API端点的链ID与钱包的链ID不同，尝试切换网络
-        if (selectedEndpoint && selectedEndpoint.chainId !== currentChainId) {
-          console.log(`Current chain ID (${currentChainId}) doesn't match selected endpoint chain ID (${selectedEndpoint.chainId}). Attempting to switch...`);
-          
-          // 检查是否为Hardhat网络
-          if (currentChainId === 31337) {
-            console.log("Currently connected to Hardhat network. Updating selected endpoint instead of switching network.");
-            // 查找匹配Hardhat网络的端点
-            const hardhatEndpoint = apiEndpoints.find(endpoint => endpoint.chainId === 31337);
-            if (hardhatEndpoint) {
-              console.log("Found Hardhat endpoint, updating selected endpoint:", hardhatEndpoint);
-              setSelectedEndpoint(hardhatEndpoint);
-            } else {
-              console.log("No Hardhat endpoint found in apiEndpoints. Creating a new one.");
-              const newHardhatEndpoint = {
-                name: 'Hardhat Network',
-                url: 'http://localhost:8545',
-                chainId: 31337
-              };
-              setSelectedEndpoint(newHardhatEndpoint);
-            }
-          } else {
-            try {
-              await switchNetwork(selectedEndpoint.chainId);
-            } catch (switchError) {
-              console.error('Error switching network after wallet connection:', switchError);
-              // 这里不抛出错误，因为钱包已经成功连接，只是网络切换失败
-            }
-          }
-        }
+        // 监听网络变化
+        window.ethereum.on('chainChanged', handleChainChanged);
+        
+        return true;
+      } else if (process.env.NODE_ENV === 'development') {
+        // 在开发环境中使用测试钱包
+        const testWallet = getTestWallet();
+        const testProvider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
+        const testSigner = testWallet.connect(testProvider);
+        
+        setProvider(testProvider);
+        setSigner(testSigner);
+        setAccount(await testSigner.getAddress());
+        setChainId(31337);
+        
+        return true;
+      } else {
+        console.log('请安装MetaMask或其他以太坊钱包');
+        return false;
       }
     } catch (error) {
-      console.error('Error connecting wallet:', error);
-      setError(error.message);
-    } finally {
-      setIsConnecting(false);
+      console.error('连接钱包时出错:', error);
+      return false;
     }
   };
 
-  // Disconnect wallet
+  // 断开钱包连接
   const disconnectWallet = () => {
-    setAccount(null);
+    setProvider(null);
     setSigner(null);
-    setIsConnected(false);
-  };
-
-  // Get ERC20 token contract
-  const getTokenContract = (tokenAddress) => {
-    if (!provider || !tokenAddress) return null;
-    return new ethers.Contract(tokenAddress, ERC20ABI, provider);
-  };
-
-  // Get token balance
-  const getTokenBalance = async (tokenAddress, address = account) => {
-    if (!address || !tokenAddress) return ethers.BigNumber.from(0);
+    setAccount(null);
+    setChainId(null);
+    setContracts({
+      matchingEngine: null,
+      lendingPool: null,
+      lendingPoolWithLP: null,
+      liquidityMining: null
+    });
+    setContractAddresses({
+      matchingEngine: null,
+      lendingPool: null,
+      lendingPoolWithLP: null
+    });
     
-    // 检查是否为开发环境或测试网络
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    // 如果是开发环境，返回模拟数据
-    if (isDevelopment) {
-      // 获取代币信息
-      const token = supportedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
-      if (token) {
-        // 为不同的代币返回不同的模拟余额
-        if (token.symbol === 'USDC') {
-          console.log(`Returning mock balance for USDC: 10000 with ${token.decimals} decimals`);
-          return ethers.utils.parseUnits('10000', token.decimals);
-        } else if (token.symbol === 'DAI') {
-          console.log(`Returning mock balance for DAI: 15000 with ${token.decimals} decimals`);
-          return ethers.utils.parseUnits('15000', token.decimals);
-        } else if (token.symbol === 'WETH') {
-          console.log(`Returning mock balance for WETH: 10 with ${token.decimals} decimals`);
-          return ethers.utils.parseUnits('10', token.decimals);
-        }
-      }
-      
-      // 默认返回一些代币
-      const decimals = getTokenDecimals(tokenAddress);
-      console.log(`Returning default mock balance: 1000 with ${decimals} decimals`);
-      return ethers.utils.parseUnits('1000', decimals);
+    // 清理事件监听器
+    if (window.ethereum) {
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      window.ethereum.removeListener('chainChanged', handleChainChanged);
     }
-    
-    // 生产环境下的正常逻辑
-    const tokenContract = getTokenContract(tokenAddress);
-    if (!tokenContract) return ethers.BigNumber.from(0);
+  };
+
+  // 处理账户变化
+  const handleAccountsChanged = (accounts) => {
+    if (accounts.length === 0) {
+      // 用户断开了钱包连接
+      disconnectWallet();
+    } else {
+      // 用户切换了账户
+      setAccount(accounts[0]);
+    }
+  };
+
+  // 处理网络变化
+  const handleChainChanged = (_chainId) => {
+    // 重新加载页面以适应新的网络
+    window.location.reload();
+  };
+
+  // 连接钱包
+  const connectWallet = async () => {
+    const success = await initWalletProvider();
+    if (success) {
+      console.log('钱包连接成功');
+    } else {
+      console.log('钱包连接失败');
+    }
+  };
+
+  // 切换网络
+  const switchNetwork = async (targetChainId) => {
+    try {
+      if (window.ethereum) {
+        // 尝试切换到指定网络
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ethers.toQuantity(targetChainId) }],
+        });
+      } else {
+        console.log('无法切换网络：未检测到以太坊提供商');
+      }
+    } catch (switchError) {
+      // 如果网络不存在，可能会抛出错误
+      console.error('切换网络时出错:', switchError);
+    }
+  };
+
+  // 获取代币余额
+  const getTokenBalance = async (tokenAddress, userAddress) => {
+    if (!provider || !tokenAddress || !userAddress) return ethers.BigNumber.from(0);
     
     try {
-      return await tokenContract.balanceOf(address);
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, provider);
+      const balance = await tokenContract.balanceOf(userAddress);
+      return balance;
     } catch (error) {
-      console.error('Error getting token balance:', error);
-      // 发生错误时返回0
+      console.error('获取代币余额时出错:', error);
       return ethers.BigNumber.from(0);
     }
   };
 
-  // Approve token spending
-  const approveToken = async (tokenAddress, spender, amount) => {
-    if (!signer || !tokenAddress || !spender) {
-      throw new Error('Missing required parameters');
-    }
-    
-    // 检查是否为开发环境
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    
-    // 如果是开发环境，模拟批准操作
-    if (isDevelopment) {
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      // 返回模拟的交易收据
-      return {
-        status: 1,
-        transactionHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-        gasUsed: ethers.BigNumber.from(Math.floor(Math.random() * 100000))
-      };
-    }
-    
-    // 生产环境下的正常逻辑
-    const tokenContract = getTokenContract(tokenAddress).connect(signer);
-    if (!tokenContract) {
-      throw new Error('Token contract not found');
-    }
+  // 授权代币
+  const approveToken = async (tokenAddress, spenderAddress, amount) => {
+    if (!signer || !tokenAddress || !spenderAddress) return null;
     
     try {
-      const tx = await tokenContract.approve(spender, amount);
-      return await tx.wait();
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20ABI, signer);
+      const tx = await tokenContract.approve(spenderAddress, amount);
+      return tx;
     } catch (error) {
-      console.error('Error approving token:', error);
-      throw error;
+      console.error('授权代币时出错:', error);
+      return null;
     }
   };
 
   // 格式化代币金额
   const formatTokenAmount = (tokenAddress, amount) => {
-    if (!amount) return '0';
-    const decimals = getTokenDecimals(tokenAddress);
-    return ethers.utils.formatUnits(amount, decimals);
+    if (!tokenAddress || !amount) return '0';
+    
+    try {
+      const token = supportedTokens.find(t => t.address === tokenAddress);
+      if (!token) return ethers.utils.formatUnits(amount, 18);
+      
+      return ethers.utils.formatUnits(amount, token.decimals);
+    } catch (error) {
+      console.error('格式化代币金额时出错:', error);
+      return '0';
+    }
   };
 
   // 获取代币符号
   const getTokenSymbol = (tokenAddress) => {
-    const token = supportedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
-    return token ? token.symbol : 'Unknown';
+    if (!tokenAddress) return '';
+    
+    const token = supportedTokens.find(t => t.address === tokenAddress);
+    return token ? token.symbol : '';
   };
 
   // 获取代币小数位数
   const getTokenDecimals = (tokenAddress) => {
-    const token = supportedTokens.find(t => t.address.toLowerCase() === tokenAddress.toLowerCase());
+    if (!tokenAddress) return 18;
+    
+    const token = supportedTokens.find(t => t.address === tokenAddress);
     return token ? token.decimals : 18;
   };
 
-  // 将网络添加到MetaMask
-  const addNetworkToMetaMask = async (chainId) => {
-    const ethereum = getEthereum();
-    if (!ethereum) {
-      throw new Error('MetaMask is not installed');
+  // 当提供商和链ID可用时，获取合约地址
+  useEffect(() => {
+    if (provider && chainId) {
+      const addresses = getContractAddresses(chainId);
+      setContractAddresses(addresses);
+      
+      const tokens = getSupportedTokens(chainId);
+      setSupportedTokens(tokens);
     }
-    
-    // 获取网络配置
-    const networkInfo = getNetworkConfig(chainId);
-    if (!networkInfo) {
-      throw new Error(`Network configuration not found for chain ID: ${chainId}`);
-    }
-    
-    try {
-      console.log(`Adding network to MetaMask: ${networkInfo.name} (${chainId})`);
-      
-      // 准备网络参数
-      const params = {
-        chainId: `0x${chainId.toString(16)}`, // 转换为十六进制
-        chainName: networkInfo.name,
-        rpcUrls: [networkInfo.rpcUrl],
-        nativeCurrency: {
-          name: chainId === 137 || chainId === 80001 ? 'MATIC' : 'ETH',
-          symbol: chainId === 137 || chainId === 80001 ? 'MATIC' : 'ETH',
-          decimals: 18
-        }
-      };
-      
-      // 只有当 explorer 存在且不为空时才添加
-      if (networkInfo.explorer && networkInfo.explorer !== '') {
-        params.blockExplorerUrls = [networkInfo.explorer];
-      }
-      
-      console.log('Network params:', params);
-      
-      // 请求添加网络
-      await ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [params]
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Error adding network to MetaMask:', error);
-      throw error;
-    }
-  };
+  }, [provider, chainId]);
 
-  // 切换到指定网络
-  const switchNetwork = async (chainId) => {
-    const ethereum = getEthereum();
-    if (!ethereum) {
-      throw new Error('MetaMask is not installed');
-    }
-    
-    // 获取当前网络ID
-    const provider = new ethers.providers.Web3Provider(ethereum);
-    const network = await provider.getNetwork();
-    const currentChainId = network.chainId;
-    
-    console.log(`Current chain ID: ${currentChainId}, Target chain ID: ${chainId}`);
-    
-    // 如果当前已经是目标网络，或者当前是Hardhat网络，则不执行切换
-    if (currentChainId === chainId) {
-      console.log(`Already on target network with chain ID: ${chainId}`);
-      return true;
-    }
-    
-    if (currentChainId === 31337) {
-      console.log(`Currently on Hardhat network (chain ID: 31337). Skipping network switch.`);
-      return true;
-    }
-    
-    try {
-      console.log(`Switching to network with chain ID: ${chainId}`);
+  // 当提供商和合约地址可用时，初始化合约实例
+  useEffect(() => {
+    if (provider && (contractAddresses.matchingEngine || contractAddresses.lendingPool || contractAddresses.lendingPoolWithLP)) {
+      const matchingEngine = contractAddresses.matchingEngine ? 
+        new ethers.Contract(
+          contractAddresses.matchingEngine,
+          UnifiedMatchingEngineABI,
+          provider
+        ) : null;
       
-      // 尝试切换网络
-      await ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }]
+      const lendingPool = contractAddresses.lendingPool ? 
+        new ethers.Contract(
+          contractAddresses.lendingPool,
+          FixedRateLendingPoolABI,
+          provider
+        ) : null;
+      
+      const lendingPoolWithLP = contractAddresses.lendingPoolWithLP ? 
+        new ethers.Contract(
+          contractAddresses.lendingPoolWithLP,
+          FixedRateLendingPoolWithLPABI,
+          provider
+        ) : null;
+      
+      const liquidityMining = contractAddresses.liquidityMining ? 
+        new ethers.Contract(
+          contractAddresses.liquidityMining,
+          LiquidityMiningABI,
+          provider
+        ) : null;
+
+      setContracts({
+        matchingEngine,
+        lendingPool,
+        lendingPoolWithLP,
+        liquidityMining
       });
-      
-      console.log(`Successfully switched to network with chain ID: ${chainId}`);
-      return true;
-    } catch (error) {
-      console.error('Error switching network:', error);
-      
-      // 如果错误是因为网络不存在（错误代码4902），尝试添加网络
-      if (error.code === 4902 || 
-          (error.message && error.message.includes('Unrecognized chain ID')) ||
-          (error.data && error.data.originalError && error.data.originalError.code === 4902)) {
-        console.log('Network not found in wallet, attempting to add it...');
-        try {
-          await addNetworkToMetaMask(chainId);
-          
-          // 添加成功后，再次尝试切换网络
-          console.log('Network added successfully, trying to switch again...');
-          await ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${chainId.toString(16)}` }]
-          });
-          
-          console.log(`Successfully switched to network with chain ID: ${chainId} after adding it`);
-          return true;
-        } catch (addError) {
-          console.error('Error adding network:', addError);
-          throw addError;
-        }
-      }
-      
-      throw error;
     }
-  };
+  }, [provider, contractAddresses]);
 
   return (
     <Web3Context.Provider
@@ -456,19 +279,15 @@ export const Web3Provider = ({ children }) => {
         contracts,
         contractAddresses,
         supportedTokens,
-        isConnected,
-        isConnecting,
-        error,
+        isConnected: !!account,
         connectWallet,
         disconnectWallet,
-        getTokenContract,
+        switchNetwork,
         getTokenBalance,
         approveToken,
         formatTokenAmount,
         getTokenSymbol,
-        getTokenDecimals,
-        switchNetwork,
-        addNetworkToMetaMask
+        getTokenDecimals
       }}
     >
       {children}
@@ -477,4 +296,4 @@ export const Web3Provider = ({ children }) => {
 };
 
 // Custom hook to use the Web3 context
-export const useWeb3 = () => useContext(Web3Context); 
+export const useWeb3 = () => useContext(Web3Context);

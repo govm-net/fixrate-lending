@@ -4,7 +4,9 @@ import { Container } from '@mui/material';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import LendingPool from './components/LendingPool';
-import P2PMarketplace from './components/P2PMarketplace';
+import LendingPoolWithLP from './components/LendingPoolWithLP';
+import UnifiedMatching from './components/UnifiedMatching';
+import LiquidityMining from './components/LiquidityMining';
 import MyOrders from './components/MyOrders';
 import Settings from './components/Settings';
 import Footer from './components/Footer';
@@ -17,7 +19,9 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/lending-pool" element={<LendingPool />} />
-          <Route path="/p2p-marketplace" element={<P2PMarketplace />} />
+          <Route path="/lending-pool-with-lp" element={<LendingPoolWithLP />} />
+          <Route path="/unified-matching" element={<UnifiedMatching />} />
+          <Route path="/liquidity-mining" element={<LiquidityMining />} />
           <Route path="/my-orders" element={<MyOrders />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
@@ -27,4 +31,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

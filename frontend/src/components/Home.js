@@ -22,7 +22,7 @@ const Home = () => {
     <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
         <Typography variant="h3" component="h1" gutterBottom align="center">
-          Welcome to P2P Lending Platform
+          Welcome to Fixed Rate Lending Platform
         </Typography>
         <Typography variant="h5" align="center" color="text.secondary" paragraph>
           A decentralized platform for fixed-rate lending and borrowing
@@ -40,25 +40,9 @@ const Home = () => {
             </Button>
           </Box>
         )}
-
-        <Paper elevation={3} sx={{ p: 3, mb: 4, backgroundColor: '#f8f9fa' }}>
-          <Typography variant="h6" gutterBottom>
-            Platform Overview
-          </Typography>
-          <Typography paragraph>
-            Our P2P Lending Platform enables users to lend and borrow assets at fixed interest rates. 
-            You can either participate in the lending pool to earn interest on your assets or create 
-            direct peer-to-peer lending orders with customized terms.
-          </Typography>
-          <Typography paragraph>
-            All loans are secured with collateral to ensure lender protection. The platform uses 
-            Chainlink price feeds to determine accurate collateral values and maintain safe 
-            loan-to-value ratios.
-          </Typography>
-        </Paper>
-
-        <Grid container spacing={4}>
-          <Grid item xs={12} md={4}>
+        
+        <Grid container spacing={4} sx={{ mt: 2 }}>
+          <Grid item xs={12} md={6}>
             <Card sx={{ height: '100%' }}>
               <CardContent>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
@@ -68,8 +52,8 @@ const Home = () => {
                   </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary">
-                  Deposit your assets into the lending pool to earn interest. The pool automatically 
-                  matches borrowers and manages the loans for you.
+                  Deposit your assets to earn interest or borrow assets by providing collateral. 
+                  Our fixed-rate lending pool offers predictable returns and borrowing costs.
                 </Typography>
                 <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
                   <Button 
@@ -84,13 +68,13 @@ const Home = () => {
             </Card>
           </Grid>
           
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={6}>
             <Card sx={{ height: '100%' }}>
               <CardContent>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
                   <PeopleIcon fontSize="large" color="primary" />
                   <Typography variant="h5" component="div" sx={{ mt: 1 }}>
-                    P2P Marketplace
+                    Unified Matching Engine
                   </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary">
@@ -101,44 +85,56 @@ const Home = () => {
                   <Button 
                     variant="outlined" 
                     component={Link} 
-                    to="/p2p-marketplace"
+                    to="/unified-matching"
                   >
-                    Go to P2P Marketplace
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
-                  <SettingsIcon fontSize="large" color="primary" />
-                  <Typography variant="h5" component="div" sx={{ mt: 1 }}>
-                    Settings
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary">
-                  Configure your API endpoints and other settings. Connect to different networks 
-                  or customize your experience.
-                </Typography>
-                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Button 
-                    variant="outlined" 
-                    component={Link} 
-                    to="/settings"
-                  >
-                    Go to Settings
+                    Go to Unified Matching
                   </Button>
                 </Box>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
+        
+        <Box sx={{ mt: 6 }}>
+          <Typography variant="h4" component="h2" gutterBottom align="center">
+            How It Works
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  1. Connect Your Wallet
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Connect your Web3 wallet to interact with the decentralized lending platform.
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  2. Deposit or Borrow
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Deposit your assets to earn interest, or borrow assets by providing sufficient collateral.
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  3. Earn or Pay Fixed Rates
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Earn predictable interest on your deposits or pay fixed interest on your loans.
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Box>
       </Box>
     </Container>
   );
 };
 
-export default Home; 
+export default Home;

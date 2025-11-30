@@ -4,12 +4,18 @@
 
 Checker合约是一组用于验证借贷交易有效性的智能合约，包括通用接口和多种实现。Checker合约通过验证签名、资产价值等条件，确保交易的安全性和合规性。
 
+Checker作为UnifiedMatchingEngine的重要组成部分，专门负责交易前的风险控制和合规性检查。它不处理资金转移，仅提供验证服务，确保只有符合预设规则的交易才能被执行。
+
 ## 2. 设计目标
 
 1. 提供标准化的验证接口，支持多种验证逻辑
 2. 确保Checker本身的安全性
 3. 支持个人交易和池化资金交易的不同验证需求
 4. 允许第三方开发者实现自定义验证逻辑
+5. 实现模块化设计，便于扩展和维护
+6. 提供详细的验证日志和错误信息
+7. 支持多种资产类型的验证
+8. 实现高效的验证算法，降低Gas消耗
 
 ## 3. 验证流程图
 
@@ -83,7 +89,6 @@ sequenceDiagram
 ### 3.2 数据结构
 
 #### 3.2.1 交易验证参数
-
 Checker验证时使用的参数直接来源于LoanOrder结构体，包含以下字段：
 
 - `address checker`: Checker合约地址
@@ -98,6 +103,23 @@ Checker验证时使用的参数直接来源于LoanOrder结构体，包含以下�
 - `uint256 expiry`: 过期时间
 - `uint256 nonce`: 随机数
 - `bytes signature`: 签名数据
+
+#### 3.2.2 验证参数结构体
+```solidity
+struct VerificationParams {
+    address lender;
+    address borrower;
+    address lendToken;
+    uint256 lendAmount;
+    address collateralToken;
+    uint256 collateralAmount;
+    uint256 interestRate;
+    uint256 duration;
+    uint256 expiry;
+    uint256 nonce;
+    bytes signature;
+}
+```
 
 ## 4. IChecker接口设计
 

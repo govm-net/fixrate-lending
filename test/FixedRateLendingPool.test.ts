@@ -1,49 +1,43 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { Signer, Contract } from "ethers";
-import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { 
+  FixedRateLendingPool, 
+  MockToken, 
+  MockV3Aggregator,
+  UnifiedMatchingEngine
+} from "../typechain-types";
 
 describe("FixedRateLendingPool", function () {
-  let mockToken: any;
-  let mockPriceFeed: any;
-  let lendingPool: any;
-  let p2pMarketplace: any;
-  let owner: Signer;
-  let depositor: Signer;
-  let borrower: Signer;
-  let liquidator: Signer;
+  // 测试参数
+  const minInterestRate = 500; // 5% (500 基点)
+  const maxLoanDuration = 60 * 60 * 24 * 365; // 1年（秒）
+  const minCollateralRatio = 15000; // 150% (15000 基点)
+  const oneHour = 60 * 60; // 1小时（秒）
+
+  // 合约实例
+  let lendingPool: FixedRateLendingPool;
+  let matchingEngine: UnifiedMatchingEngine;
+  let mockToken: MockToken;
+  let mockPriceFeed: MockV3Aggregator;
+
+  // 账户地址
   let ownerAddress: string;
   let depositorAddress: string;
   let borrowerAddress: string;
   let liquidatorAddress: string;
 
-  // 测试参数
-  const initialSupply = ethers.parseEther("1000000"); // 100万代币
-  const depositAmount = ethers.parseEther("100000"); // 10万代币
-  const lendAmount = ethers.parseEther("10000"); // 1万代币
-  const collateralAmount = ethers.parseEther("25000"); // 2.5万代币，确保抵押率为250%
-  const interestRate = 1000; // 10%
-  const loanDuration = 30 * 24 * 60 * 60; // 30天
-  const minInterestRate = 500; // 5%
-  const maxLoanDuration = 60 * 24 * 60 * 60; // 60天
-  const minCollateralRatio = 12000; // 120%
-  const oneHour = 60 * 60; // 1小时（秒）
-
-  // 部署模拟价格预言机
-  async function deployMockPriceFeed() {
-    const MockPriceFeed = await ethers.getContractFactory("MockPriceFeed");
-    const mockPriceFeed = await MockPriceFeed.deploy();
+  // 部署模拟价格预言机的辅助函数
+  async function deployMockPriceFeed(): Promise<MockV3Aggregator> {
+    const MockPriceFeed = await ethers.getContractFactory("MockV3Aggregator");
+    const mockPriceFeed = await MockPriceFeed.deploy(8, 200000000000); // 8 decimals, $2000 initial price
     
-    // 设置代币价格：1 ETH = $2000，8位小数
-    await mockPriceFeed.setLatestAnswer(200000000000); // $2000 with 8 decimals
-    await mockPriceFeed.setDecimals(8);
-    
-    return mockPriceFeed;
+    return mockPriceFeed as unknown as MockV3Aggregator;
   }
 
   beforeEach(async function () {
     // 获取签名者
-    [owner, depositor, borrower, liquidator] = await ethers.getSigners();
+    const [owner, depositor, borrower, liquidator] = await ethers.getSigners();
     ownerAddress = await owner.getAddress();
     depositorAddress = await depositor.getAddress();
     borrowerAddress = await borrower.getAddress();
@@ -56,6 +50,10 @@ describe("FixedRateLendingPool", function () {
     // 部署模拟价格预言机
     mockPriceFeed = await deployMockPriceFeed();
 
+    // 部署统一撮合引擎
+    const UnifiedMatchingEngine = await ethers.getContractFactory("UnifiedMatchingEngine");
+    matchingEngine = await UnifiedMatchingEngine.deploy();
+
     // 部署借贷池
     const FixedRateLendingPool = await ethers.getContractFactory("FixedRateLendingPool");
     lendingPool = await FixedRateLendingPool.deploy(
@@ -64,318 +62,173 @@ describe("FixedRateLendingPool", function () {
       minCollateralRatio
     );
 
-    // 部署P2P借贷市场
-    const P2PLendingMarketplace = await ethers.getContractFactory("P2PLendingMarketplace");
-    p2pMarketplace = await P2PLendingMarketplace.deploy();
-
-    // 设置市场合约地址
-    await lendingPool.setMarketplaceAddress(await p2pMarketplace.getAddress());
+    // 设置撮合引擎地址
+    await lendingPool.setMatchingEngineAddress(await matchingEngine.getAddress());
 
     // 添加支持的代币和价格预言机
     await lendingPool.addSupportedToken(await mockToken.getAddress(), await mockPriceFeed.getAddress());
-
-    // 设置代币价格为2000美元（8位小数）
-    await mockPriceFeed.setLatestAnswer(200000000000);
-
-    // 铸造代币给测试账户
-    await mockToken.mint(ownerAddress, initialSupply);
-    await mockToken.mint(depositorAddress, initialSupply);
-    await mockToken.mint(borrowerAddress, initialSupply);
-
-    // 存款到借贷池
-    await mockToken.connect(depositor).approve(await lendingPool.getAddress(), depositAmount);
-    await lendingPool.connect(depositor).deposit(await mockToken.getAddress(), depositAmount);
-
-    // 授权P2P市场合约使用代币
-    await mockToken.connect(borrower).approve(await p2pMarketplace.getAddress(), collateralAmount);
-    // 授权借贷池合约使用代币（用于还款）
-    await mockToken.connect(borrower).approve(await lendingPool.getAddress(), ethers.parseEther("20000")); // 足够支付本金+利息
   });
 
-  describe("借贷池基本功能", function () {
-    it("应该正确初始化借贷池参数", async function () {
+  describe("部署和初始化", function () {
+    it("应该正确设置初始参数", async function () {
       expect(await lendingPool.minInterestRate()).to.equal(minInterestRate);
       expect(await lendingPool.maxLoanDuration()).to.equal(maxLoanDuration);
       expect(await lendingPool.minCollateralRatio()).to.equal(minCollateralRatio);
     });
 
-    it("应该允许添加和移除支持的代币", async function () {
-      const tokenAddress = await mockToken.getAddress();
-      
-      // 验证代币已添加
-      expect(await lendingPool.supportedTokens(tokenAddress)).to.be.true;
-      
-      // 验证价格预言机已设置
-      expect(await lendingPool.tokenPriceFeeds(tokenAddress)).to.equal(await mockPriceFeed.getAddress());
-      
-      // 移除代币
-      await lendingPool.removeSupportedToken(tokenAddress);
-      
-      // 验证代币已移除
-      expect(await lendingPool.supportedTokens(tokenAddress)).to.be.false;
+    it("所有者应该能够设置撮合引擎地址", async function () {
+      const newMatchingEngine = await (await ethers.getContractFactory("UnifiedMatchingEngine")).deploy();
+      await lendingPool.setMatchingEngineAddress(await newMatchingEngine.getAddress());
+      expect(await lendingPool.matchingEngineAddress()).to.equal(await newMatchingEngine.getAddress());
     });
 
-    it("应该允许向池中存款和提款", async function () {
-      const tokenAddress = await mockToken.getAddress();
-      
-      // 验证存款成功
-      expect(await lendingPool.poolBalance(tokenAddress)).to.equal(depositAmount);
-      
-      // 提款
-      const withdrawAmount = ethers.parseEther("50000"); // 5万代币
-      await lendingPool.withdraw(tokenAddress, withdrawAmount);
-      
-      // 验证提款成功
-      expect(await lendingPool.poolBalance(tokenAddress)).to.equal(depositAmount - withdrawAmount);
-    });
-
-    it("应该允许更新池参数", async function () {
-      const newMinInterestRate = 800; // 8%
-      const newMaxLoanDuration = 90 * 24 * 60 * 60; // 90天
-      const newMinCollateralRatio = 15000; // 150%
-      
-      await lendingPool.updatePoolParams(
-        newMinInterestRate,
-        newMaxLoanDuration,
-        newMinCollateralRatio
-      );
-      
-      expect(await lendingPool.minInterestRate()).to.equal(newMinInterestRate);
-      expect(await lendingPool.maxLoanDuration()).to.equal(newMaxLoanDuration);
-      expect(await lendingPool.minCollateralRatio()).to.equal(newMinCollateralRatio);
-    });
-    
-    it("应该正确获取代币价格和价值", async function () {
-      const tokenAddress = await mockToken.getAddress();
-      const amount = ethers.parseEther("1"); // 1个代币
-      
-      // 获取代币价格
-      const price = await lendingPool.getTokenPrice(tokenAddress);
-      expect(price).to.equal(200000000000); // $2000 with 8 decimals
-      
-      // 计算代币价值
-      const value = await lendingPool.calculateTokenValue(tokenAddress, amount);
-      // 由于我们的实现，价值计算为：价格 * 数量 / 10^(代币小数位数)
-      // 200000000000 * 10^18 / 10^18 = 200000000000
-      expect(value).to.equal(200000000000);
+    it("非所有者不应该能够设置撮合引擎地址", async function () {
+      const [_, nonOwner] = await ethers.getSigners();
+      const newMatchingEngine = await (await ethers.getContractFactory("UnifiedMatchingEngine")).deploy();
+      await expect(
+        lendingPool.connect(nonOwner).setMatchingEngineAddress(await newMatchingEngine.getAddress())
+      ).to.be.reverted;
     });
   });
 
-  describe("借贷池与P2P市场集成", function () {
-    let orderHash: string;
-    let expiry: number;
-    let nonce: number;
+  describe("代币支持管理", function () {
+    it("所有者应该能够添加支持的代币", async function () {
+      const newToken = await (await ethers.getContractFactory("MockToken")).deploy("New Token", "NTK", 18);
+      const newPriceFeed = await deployMockPriceFeed();
+      
+      await lendingPool.addSupportedToken(await newToken.getAddress(), await newPriceFeed.getAddress());
+      expect(await lendingPool.supportedTokens(await newToken.getAddress())).to.be.true;
+    });
+
+    it("非所有者不应该能够添加支持的代币", async function () {
+      const [_, nonOwner] = await ethers.getSigners();
+      const newToken = await (await ethers.getContractFactory("MockToken")).deploy("New Token", "NTK", 18);
+      const newPriceFeed = await deployMockPriceFeed();
+      
+      await expect(
+        lendingPool.connect(nonOwner).addSupportedToken(await newToken.getAddress(), await newPriceFeed.getAddress())
+      ).to.be.reverted;
+    });
+  });
+
+  describe("价格获取", function () {
+    it("应该能够正确获取代币价格", async function () {
+      const price = await lendingPool.getTokenPrice(await mockToken.getAddress());
+      expect(price).to.equal(200000000000n); // $2000 with 8 decimals
+    });
+
+    it("对于不支持的代币应该回退", async function () {
+      const unsupportedToken = await (await ethers.getContractFactory("MockToken")).deploy("Unsupported Token", "UTK", 18);
+      await expect(
+        lendingPool.getTokenPrice(await unsupportedToken.getAddress())
+      ).to.be.revertedWith("Price feed not found");
+    });
+  });
+
+  describe("抵押品价值计算", function () {
+    it("应该能够正确计算代币价值", async function () {
+      const amount = ethers.parseEther("1"); // 1 token
+      const value = await lendingPool.calculateTokenValue(await mockToken.getAddress(), amount);
+      // 价格是 200000000000 (8位小数) * 10^18 (代币数量) / 10^18 (代币小数) = 200000000000 (8位小数)
+      // 但我们需要将其转换为18位小数格式，所以应该是 2000 * 10^18 = 2000000000000000000000
+      expect(value).to.equal(200000000000n);
+    });
+
+    it("对于不支持的代币应该回退", async function () {
+      const unsupportedToken = await (await ethers.getContractFactory("MockToken")).deploy("Unsupported Token", "UTK", 18);
+      const amount = ethers.parseEther("1");
+      await expect(
+        lendingPool.calculateTokenValue(await unsupportedToken.getAddress(), amount)
+      ).to.be.revertedWith("Price feed not found");
+    });
+  });
+
+  describe("存款功能", function () {
+    const depositAmount = ethers.parseEther("1000");
 
     beforeEach(async function () {
-      nonce = 1;
-      // 获取当前区块时间戳
-      const blockNumBefore = await ethers.provider.getBlockNumber();
-      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
-      const currentTimestamp = blockBefore!.timestamp;
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
       
-      // 设置过期时间为当前区块时间 + 1小时
-      expiry = currentTimestamp + oneHour;
+      // 铸造代币给存款人
+      await mockToken.mint(depositorAddress, depositAmount);
+      // 授权借贷池合约使用存款人的代币
+      await mockToken.connect(depositor).approve(await lendingPool.getAddress(), depositAmount);
     });
 
-    it("应该允许从借贷池执行订单", async function () {
-      // 获取借贷池地址
-      const poolAddress = await lendingPool.getAddress();
+    it("用户应该能够存款", async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
       
-      // 执行池订单
-      const tx = await p2pMarketplace.connect(borrower).fulfillPoolOrder(
-        poolAddress, // 池地址作为出借人
-        await mockToken.getAddress(), // 借出代币
-        lendAmount, // 借出金额
-        await mockToken.getAddress(), // 抵押代币
-        collateralAmount, // 抵押金额
-        interestRate, // 利率
-        loanDuration, // 借款期限
-        expiry, // 过期时间
-        nonce // 随机数
-      );
-      
-      // 获取交易收据
-      const receipt = await tx.wait();
-      
-      // 从事件中获取订单哈希
-      const event = receipt!.logs.find(
-        (log: any) => log.fragment && log.fragment.name === "PoolOrderFulfilled"
-      );
-      
-      if (event) {
-        orderHash = event.args[0];
-      }
-      
-      // 验证订单状态
-      expect(await p2pMarketplace.offchainOrderStatus(orderHash)).to.equal(1); // ACTIVE
-      expect(await p2pMarketplace.offchainOrderBorrowers(orderHash)).to.equal(borrowerAddress);
-      expect(await p2pMarketplace.offchainOrderStartTimes(orderHash)).to.be.gt(0);
-      expect(await p2pMarketplace.isPoolOrder(orderHash)).to.be.true;
-      expect(await p2pMarketplace.getOffchainOrderPool(orderHash)).to.equal(poolAddress);
-      
-      // 验证资金转移
-      const expectedBalance = initialSupply + lendAmount - collateralAmount;
-      expect(await mockToken.balanceOf(borrowerAddress)).to.equal(expectedBalance);
-      expect(await lendingPool.totalBorrowed(await mockToken.getAddress())).to.equal(lendAmount);
-    });
-
-    it("应该允许向借贷池还款", async function () {
-      // 获取借贷池地址
-      const poolAddress = await lendingPool.getAddress();
-      
-      // 执行池订单
-      const tx = await p2pMarketplace.connect(borrower).fulfillPoolOrder(
-        poolAddress, // 池地址作为出借人
-        await mockToken.getAddress(), // 借出代币
-        lendAmount, // 借出金额
-        await mockToken.getAddress(), // 抵押代币
-        collateralAmount, // 抵押金额
-        interestRate, // 利率
-        loanDuration, // 借款期限
-        expiry, // 过期时间
-        nonce // 随机数
-      );
-      
-      // 获取交易收据
-      const receipt = await tx.wait();
-      
-      // 从事件中获取订单哈希
-      const event = receipt!.logs.find(
-        (log: any) => log.fragment && log.fragment.name === "PoolOrderFulfilled"
-      );
-      
-      let orderHash: string;
-      if (event) {
-        orderHash = event.args[0];
-      } else {
-        throw new Error("PoolOrderFulfilled event not found");
-      }
-      
-      // 计算利息
-      const interest = await p2pMarketplace.calculateInterest(
-        lendAmount,
-        interestRate,
-        await p2pMarketplace.offchainOrderStartTimes(orderHash),
-        loanDuration
-      );
-      const totalRepayment = lendAmount + interest;
-      
-      // 授权借贷池合约使用代币（确保足够的授权额度）
-      await mockToken.connect(borrower).approve(await lendingPool.getAddress(), totalRepayment+interest);
-      
-      // 还款
-      await p2pMarketplace.connect(borrower).repayOffchainOrder({
-        lender: poolAddress,
-        lendToken: await mockToken.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await mockToken.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce
-      });
-      
-      // 验证订单状态
-      expect(await p2pMarketplace.offchainOrderStatus(orderHash)).to.equal(2); // REPAID
-    });
-
-    it("应该允许清算逾期的池订单", async function () {
-      // 获取借贷池地址
-      const poolAddress = await lendingPool.getAddress();
-      
-      // 执行池订单
-      const tx = await p2pMarketplace.connect(borrower).fulfillPoolOrder(
-        poolAddress, // 池地址作为出借人
-        await mockToken.getAddress(), // 借出代币
-        lendAmount, // 借出金额
-        await mockToken.getAddress(), // 抵押代币
-        collateralAmount, // 抵押金额
-        interestRate, // 利率
-        loanDuration, // 借款期限
-        expiry, // 过期时间
-        nonce // 随机数
-      );
-      
-      // 获取交易收据
-      const receipt = await tx.wait();
-      
-      // 从事件中获取订单哈希
-      const event = receipt!.logs.find(
-        (log: any) => log.fragment && log.fragment.name === "PoolOrderFulfilled"
-      );
-      
-      let orderHash: string;
-      if (event) {
-        orderHash = event.args[0];
-      } else {
-        throw new Error("PoolOrderFulfilled event not found");
-      }
-      
-      // 前进时间超过借款期限
-      await time.increase(loanDuration + 1);
-      
-      // 清算订单
-      await p2pMarketplace.connect(liquidator).liquidateOffchainOrder({
-        lender: poolAddress,
-        lendToken: await mockToken.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await mockToken.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce
-      });
-      
-      // 验证订单状态
-      expect(await p2pMarketplace.offchainOrderStatus(orderHash)).to.equal(3); // LIQUIDATED
-    });
-
-    it("应该拒绝抵押率不足的订单", async function () {
-      // 获取借贷池地址
-      const poolAddress = await lendingPool.getAddress();
-      
-      // 设置抵押率不足的抵押金额
-      const lowCollateralAmount = ethers.parseEther("1"); // 很小的抵押金额
-      
-      // 尝试执行抵押率不足的订单
       await expect(
-        p2pMarketplace.connect(borrower).fulfillPoolOrder(
-          poolAddress, // 池地址作为出借人
-          await mockToken.getAddress(), // 借出代币
-          lendAmount, // 借出金额
-          await mockToken.getAddress(), // 抵押代币
-          lowCollateralAmount, // 抵押金额不足
-          interestRate, // 利率
-          loanDuration, // 借款期限
-          expiry, // 过期时间
-          nonce // 随机数
-        )
-      ).to.be.revertedWith("Pool order verification failed");
+        lendingPool.connect(depositor).deposit(await mockToken.getAddress(), depositAmount)
+      )
+        .to.emit(lendingPool, "Deposited")
+        .withArgs(await mockToken.getAddress(), depositorAddress, depositAmount);
     });
 
-    it("应该拒绝不满足条件的池订单", async function () {
-      // 获取借贷池地址
-      const poolAddress = await lendingPool.getAddress();
+    it("没有足够余额的用户不应该能够存款", async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
       
-      // 设置超过最大借款期限的期限
-      const tooLongDuration = 366 * 24 * 60 * 60; // 366天
-      
-      // 尝试执行期限过长的订单
+      const largeAmount = ethers.parseEther("1000000"); // 100万代币
       await expect(
-        p2pMarketplace.connect(borrower).fulfillPoolOrder(
-          poolAddress, // 池地址作为出借人
-          await mockToken.getAddress(), // 借出代币
-          lendAmount, // 借出金额
-          await mockToken.getAddress(), // 抵押代币
-          collateralAmount, // 抵押金额
-          interestRate, // 利率
-          tooLongDuration, // 借款期限过长
-          expiry, // 过期时间
-          nonce // 随机数
-        )
-      ).to.be.revertedWith("Pool order verification failed");
+        lendingPool.connect(depositor).deposit(await mockToken.getAddress(), largeAmount)
+      ).to.be.reverted; // 应该因为ERC20的transfer失败而回退
+    });
+
+    it("没有足够授权的用户不应该能够存款", async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
+      
+      // 先减少授权额度
+      await mockToken.connect(depositor).approve(await lendingPool.getAddress(), 0);
+      await expect(
+        lendingPool.connect(depositor).deposit(await mockToken.getAddress(), depositAmount)
+      ).to.be.reverted; // 应该因为ERC20的transferFrom失败而回退
     });
   });
-}); 
+
+  describe("提款功能", function () {
+    const depositAmount = ethers.parseEther("1000");
+    const withdrawAmount = ethers.parseEther("500");
+
+    beforeEach(async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
+      
+      // 铸造代币给存款人
+      await mockToken.mint(depositorAddress, depositAmount);
+      // 授权借贷池合约使用存款人的代币
+      await mockToken.connect(depositor).approve(await lendingPool.getAddress(), depositAmount);
+      // 存款
+      await lendingPool.connect(depositor).deposit(await mockToken.getAddress(), depositAmount);
+    });
+
+    it("用户应该能够提款", async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
+      
+      await expect(
+        lendingPool.connect(depositor).withdraw(await mockToken.getAddress(), withdrawAmount)
+      )
+        .to.emit(lendingPool, "Withdrawn")
+        .withArgs(await mockToken.getAddress(), depositorAddress, withdrawAmount);
+    });
+
+    it("用户提款时超过其余额会被调整为实际余额", async function () {
+      // 获取签名者
+      const [_, depositor] = await ethers.getSigners();
+      
+      const largeAmount = ethers.parseEther("2000"); // 超过存款余额
+      // 在新的实现中，提款金额会被自动调整为用户的实际余额，而不是回滚
+      await expect(
+        lendingPool.connect(depositor).withdraw(await mockToken.getAddress(), largeAmount)
+      )
+        .to.emit(lendingPool, "Withdrawn")
+        // 应该发出提款事件，金额为实际余额
+        .to.emit(lendingPool, "Withdrawn")
+        .withArgs(await mockToken.getAddress(), depositorAddress, depositAmount);
+    });
+  });
+});

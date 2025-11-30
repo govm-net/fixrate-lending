@@ -1,4 +1,4 @@
-const { buildModule } = require("@nomicfoundation/hardhat-ignition/modules");
+import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 const LendingContractsModule = buildModule("LendingContracts", (m) => {
   // 设置池参数
@@ -6,8 +6,8 @@ const LendingContractsModule = buildModule("LendingContracts", (m) => {
   const maxLoanDuration = 60 * 60 * 24 * 365; // 1年（秒）
   const minCollateralRatio = 15000; // 150% (15000 基点)
 
-  // 部署 P2PLendingMarketplace 合约
-  const marketplace = m.contract("P2PLendingMarketplace");
+  // 部署 UnifiedMatchingEngine 合约
+  const matchingEngine = m.contract("UnifiedMatchingEngine");
 
   // 部署 FixedRateLendingPool 合约
   const lendingPool = m.contract("FixedRateLendingPool", [
@@ -16,8 +16,18 @@ const LendingContractsModule = buildModule("LendingContracts", (m) => {
     minCollateralRatio
   ]);
 
-  // 设置市场合约地址
-  m.call(lendingPool, "setMarketplaceAddress", [marketplace]);
+  // 部署 PersonalChecker 合约
+  const personalChecker = m.contract("PersonalChecker");
+
+  // 部署 PoolChecker 合约
+  const poolChecker = m.contract("PoolChecker", [minCollateralRatio]);
+
+  // 设置匹配引擎地址
+  m.call(lendingPool, "setMatchingEngineAddress", [matchingEngine]);
+
+  // 授权 PersonalChecker 和 PoolChecker 合约
+  m.call(matchingEngine, "authorizeChecker", [personalChecker]);
+  m.call(matchingEngine, "authorizeChecker", [poolChecker]);
 
   // 如果是测试网络，部署模拟代币和价格预言机
   if (process.env.NETWORK_TYPE === "testnet") {
@@ -31,36 +41,30 @@ const LendingContractsModule = buildModule("LendingContracts", (m) => {
     const mockWBTC = m.contract("MockToken", ["Wrapped Bitcoin", "WBTC", 8]);
     
     // 部署价格预言机
-    const usdcPriceFeed = m.contract("MockPriceFeed");
-    const wethPriceFeed = m.contract("MockPriceFeed");
-    const wbtcPriceFeed = m.contract("MockPriceFeed");
+    const usdcPriceFeed = m.contract("MockV3Aggregator", [8, 100000000]); // $1 with 8 decimals
+    const wethPriceFeed = m.contract("MockV3Aggregator", [8, 300000000000]); // $3000 with 8 decimals
+    const wbtcPriceFeed = m.contract("MockV3Aggregator", [8, 5000000000000]); // $50000 with 8 decimals
     
     // 设置价格
-    m.call(usdcPriceFeed, "setLatestAnswer", [100000000]); // $1 with 8 decimals
-    m.call(wethPriceFeed, "setLatestAnswer", [300000000000]); // $3000 with 8 decimals
-    m.call(wbtcPriceFeed, "setLatestAnswer", [5000000000000]); // $50000 with 8 decimals
+    m.call(usdcPriceFeed, "updateAnswer", [100000000]); // $1 with 8 decimals
+    m.call(wethPriceFeed, "updateAnswer", [300000000000]); // $3000 with 8 decimals
+    m.call(wbtcPriceFeed, "updateAnswer", [5000000000000]); // $50000 with 8 decimals
     
-    // 将代币添加到借贷池
-    m.call(lendingPool, "addSupportedToken", [mockUSDC, usdcPriceFeed]);
-    m.call(lendingPool, "addSupportedToken", [mockWETH, wethPriceFeed]);
-    m.call(lendingPool, "addSupportedToken", [mockWBTC, wbtcPriceFeed]);
-
-    return {
-      marketplace,
-      lendingPool,
-      mockUSDC,
-      mockWETH,
-      mockWBTC,
-      usdcPriceFeed,
-      wethPriceFeed,
-      wbtcPriceFeed
+    return { 
+      matchingEngine, 
+      lendingPool, 
+      personalChecker,
+      poolChecker,
+      mockUSDC, 
+      mockWETH, 
+      mockWBTC, 
+      usdcPriceFeed, 
+      wethPriceFeed, 
+      wbtcPriceFeed 
     };
   }
 
-  return {
-    marketplace,
-    lendingPool
-  };
+  return { matchingEngine, lendingPool, personalChecker, poolChecker };
 });
 
-module.exports = LendingContractsModule; 
+export default LendingContractsModule;

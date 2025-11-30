@@ -4,29 +4,54 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/ILendingPool.sol";
 import "./interfaces/AggregatorV3Interface.sol";
 
+// LP Token 合约实现
+contract LPToken is ERC20 {
+    address public poolAddress;
+    address public underlyingToken;
+    
+    constructor(
+        address _poolAddress,
+        address _underlyingToken,
+        string memory name,
+        string memory symbol
+    ) ERC20(name, symbol) {
+        poolAddress = _poolAddress;
+        underlyingToken = _underlyingToken;
+    }
+    
+    function mint(address to, uint256 amount) external {
+        require(msg.sender == poolAddress, "Only pool can mint");
+        _mint(to, amount);
+    }
+    
+    function burn(address from, uint256 amount) external {
+        require(msg.sender == poolAddress, "Only pool can burn");
+        _burn(from, amount);
+    }
+}
+
 /**
  * @title FixedRateLendingPool
- * @dev 固定利率借贷池，实现ILendingPool接口，可与P2PLendingMarketplace集成
+ * @dev 固定利率借贷池，实现ILendingPool接口，可与UnifiedMatchingEngine集成
+ * 增加了ERC20 LP Token功能，用户存款后会获得代表其份额的LP Token
  */
 contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     using SafeERC20 for IERC20;
 
+    // LP Token 合约
+    mapping(address => address) public lpTokens;
+    
     // 支持的代币
     mapping(address => bool) public supportedTokens;
     
     // 代币价格预言机
     mapping(address => address) public tokenPriceFeeds;
-    
-    // 池中资金余额
-    mapping(address => uint256) public poolBalance;
-    
-    // 每个用户在池中的存款余额
-    mapping(address => mapping(address => uint256)) public userDeposits;
     
     // 池中总借出金额
     mapping(address => uint256) public totalBorrowed;
@@ -42,11 +67,11 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     // 价格有效期（1小时）
     uint256 public constant PRICE_VALIDITY_PERIOD = 1 hours;
     
-    // 授权的市场合约地址
-    address public marketplaceAddress;
+    // 授权的匹配引擎合约地址
+    address public matchingEngineAddress;
     
     // 事件
-    event TokenAdded(address indexed token, address indexed priceFeed);
+    event TokenAdded(address indexed token, address indexed priceFeed, address indexed lpToken);
     event TokenRemoved(address indexed token);
     event PriceFeedUpdated(address indexed token, address indexed priceFeed);
     event Deposited(address indexed token, address indexed depositor, uint256 amount);
@@ -72,11 +97,11 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         uint256 maxLoanDuration,
         uint256 minCollateralRatio
     );
-    event MarketplaceAddressUpdated(address indexed newMarketplace);
+    event MatchingEngineAddressUpdated(address indexed newMatchingEngine);
 
-    // 修饰符：只允许市场合约调用
-    modifier onlyMarketplace() {
-        require(msg.sender == marketplaceAddress, "Only marketplace can call");
+    // 修饰符：只允许匹配引擎合约调用
+    modifier onlyMatchingEngine() {
+        require(msg.sender == matchingEngineAddress, "Only matching engine can call");
         _;
     }
 
@@ -94,17 +119,17 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         minInterestRate = _minInterestRate;
         maxLoanDuration = _maxLoanDuration;
         minCollateralRatio = _minCollateralRatio;
-        marketplaceAddress = msg.sender;
+        matchingEngineAddress = msg.sender;
     }
     
     /**
-     * @dev 设置市场合约地址
-     * @param _marketplaceAddress 市场合约地址
+     * @dev 设置匹配引擎合约地址
+     * @param _matchingEngineAddress 匹配引擎合约地址
      */
-    function setMarketplaceAddress(address _marketplaceAddress) external onlyOwner {
-        require(_marketplaceAddress != address(0), "Invalid marketplace address");
-        marketplaceAddress = _marketplaceAddress;
-        emit MarketplaceAddressUpdated(_marketplaceAddress);
+    function setMatchingEngineAddress(address _matchingEngineAddress) external onlyOwner {
+        require(_matchingEngineAddress != address(0), "Invalid matching engine address");
+        matchingEngineAddress = _matchingEngineAddress;
+        emit MatchingEngineAddressUpdated(_matchingEngineAddress);
     }
 
     /**
@@ -119,7 +144,15 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         supportedTokens[_token] = true;
         tokenPriceFeeds[_token] = _priceFeed;
         
-        emit TokenAdded(_token, _priceFeed);
+        // 创建对应的 LP Token
+        string memory tokenSymbol = IERC20Metadata(_token).symbol();
+        string memory lpTokenName = string(abi.encodePacked("FixRate LP ", tokenSymbol));
+        string memory lpTokenSymbol = string(abi.encodePacked("frLP-", tokenSymbol));
+        
+        LPToken lpToken = new LPToken(address(this), _token, lpTokenName, lpTokenSymbol);
+        lpTokens[_token] = address(lpToken);
+        
+        emit TokenAdded(_token, _priceFeed, address(lpToken));
     }
 
     /**
@@ -172,15 +205,18 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     function deposit(address _token, uint256 _amount) external nonReentrant {
         require(supportedTokens[_token], "Token not supported");
         require(_amount > 0, "Amount must be greater than 0");
+        require(msg.sender != address(this), "Cannot deposit for contract");
+        
+        // 获取对应的 LP Token
+        address lpTokenAddress = lpTokens[_token];
+        require(lpTokenAddress != address(0), "LP Token not created");
+        LPToken lpToken = LPToken(lpTokenAddress);
         
         // 转移代币到池中
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         
-        // 更新池余额
-        poolBalance[_token] += _amount;
-        
-        // 记录用户的存款金额
-        userDeposits[_token][msg.sender] += _amount;
+        // 铸造 LP Token 给存款人
+        lpToken.mint(msg.sender, _amount);
         
         emit Deposited(_token, msg.sender, _amount);
     }
@@ -194,19 +230,19 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         require(supportedTokens[_token], "Token not supported");
         require(_amount > 0, "Amount must be greater than 0");
         
-        // 计算用户可提取金额
-        uint256 userDeposit = userDeposits[_token][msg.sender];
-        require(_amount <= userDeposit, "Insufficient user deposit");
+        // 获取对应的 LP Token
+        address lpTokenAddress = lpTokens[_token];
+        require(lpTokenAddress != address(0), "LP Token not created");
+        LPToken lpToken = LPToken(lpTokenAddress);
         
-        // 计算池中可提取金额（总余额 - 已借出）
-        uint256 availableAmount = poolBalance[_token] - totalBorrowed[_token];
-        require(_amount <= availableAmount, "Insufficient available balance");
+        // 确保不会销毁超过用户持有的 LP Token
+        uint256 userLpBalance = lpToken.balanceOf(msg.sender);
+        if (_amount > userLpBalance) {
+            _amount = userLpBalance;
+        }
         
-        // 更新用户存款余额
-        userDeposits[_token][msg.sender] -= _amount;
-        
-        // 更新池余额
-        poolBalance[_token] -= _amount;
+        // 销毁用户的 LP Token
+        lpToken.burn(msg.sender, _amount);
         
         // 转移代币给提款人
         IERC20(_token).safeTransfer(msg.sender, _amount);
@@ -232,7 +268,7 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
             uint256 updatedAt,
             uint80 answeredInRound
         ) = feed.latestRoundData();
-        
+        startedAt;
         require(price > 0, "Invalid price");
         require(updatedAt != 0, "Round not complete");
         require(answeredInRound >= roundId, "Stale price");
@@ -268,7 +304,7 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
      * @param collateralAmount 抵押金额
      * @param interestRate 利率（基点）
      * @param duration 借款期限（秒）
-     * @param _borrower 借款人地址（未使用）
+     * @param borrower 借款人地址（未使用）
      * @return 订单是否可行
      */
     function checkOrder(
@@ -278,16 +314,22 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         uint256 collateralAmount,
         uint256 interestRate,
         uint256 duration,
-        address _borrower
+        address borrower
     ) external view override returns (bool) {
-        _borrower;
+        borrower;
         // 检查代币是否支持
         if (!supportedTokens[lendToken] || !supportedTokens[collateralToken]) {
             return false;
         }
+
+        address lpTokenAddress = lpTokens[lendToken];
+        require(lpTokenAddress != address(0), "LP Token not created");
+        LPToken lpToken = LPToken(lpTokenAddress);
         
+        uint256 totalSupply = lpToken.totalSupply();
+
         // 检查池中是否有足够的资金
-        uint256 availableAmount = poolBalance[lendToken] - totalBorrowed[lendToken];
+        uint256 availableAmount = totalSupply - totalBorrowed[lendToken];
         if (lendAmount > availableAmount) {
             return false;
         }
@@ -341,7 +383,8 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         uint256 duration,
         address borrower,
         bytes32 orderHash
-    ) external override nonReentrant onlyMarketplace returns (bool) {
+    ) external override nonReentrant onlyMatchingEngine returns (bool) {
+        require(!activeOrders[orderHash], "Order already exists");
         // 检查订单是否可行
         require(
             this.checkOrder(
@@ -392,16 +435,14 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         uint256 repayAmount,
         bytes32 orderHash,
         address borrower
-    ) external override nonReentrant onlyMarketplace returns (bool) {
+    ) external override nonReentrant onlyMatchingEngine returns (bool) {
         // 验证订单哈希是否存在且活跃
         require(activeOrders[orderHash], "Order not found or not active");
         
         // 验证代币是否支持
         require(supportedTokens[lendToken], "Token not supported");
         
-        // 不再需要从借款人转移代币，假设代币已经由市场合约转移
         // 更新池余额（本金已经在池余额中，只需减少借出金额）
-        // 注意：这里简化处理，实际应该记录每个订单的本金
         if (repayAmount > totalBorrowed[lendToken]) {
             totalBorrowed[lendToken] = 0;
         } else {
@@ -422,17 +463,10 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
      * @return 可用余额
      */
     function getAvailableBalance(address _token) external view returns (uint256) {
-        return poolBalance[_token] - totalBorrowed[_token];
-    }
-
-    /**
-     * @dev 获取用户在池中的存款余额
-     * @param _token 代币地址
-     * @param _user 用户地址
-     * @return 用户存款余额
-     */
-    function getUserDeposit(address _token, address _user) external view returns (uint256) {
-        return userDeposits[_token][_user];
+        address lpTokenAddress = lpTokens[_token];
+        require(lpTokenAddress != address(0), "LP Token not created");
+        LPToken lpToken = LPToken(lpTokenAddress);
+        return lpToken.totalSupply() - totalBorrowed[_token];
     }
 
     /**
@@ -442,5 +476,19 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
      */
     function isOrderActive(bytes32 _orderHash) external view returns (bool) {
         return activeOrders[_orderHash];
+    }
+    
+    /**
+     * @dev 获取用户的 LP Token 余额
+     * @param _token 代币地址
+     * @param _user 用户地址
+     * @return 用户 LP Token 余额
+     */
+    function getUserLpBalance(address _token, address _user) external view returns (uint256) {
+        address lpTokenAddress = lpTokens[_token];
+        if (lpTokenAddress == address(0)) {
+            return 0;
+        }
+        return LPToken(lpTokenAddress).balanceOf(_user);
     }
 }

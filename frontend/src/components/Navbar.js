@@ -1,87 +1,99 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  Button, 
-  Box, 
-  IconButton, 
-  Menu, 
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  Menu,
   MenuItem,
   Chip,
   Tooltip,
-  Divider
+  Box
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import { useWeb3 } from '../contexts/Web3Context';
-import { getNetworkName } from '../utils/networkConfig';
 
 const Navbar = () => {
-  const { account, isConnected, connectWallet, disconnectWallet, chainId } = useWeb3();
-
-  
+  const { isConnected, account, chainId, connectWallet, disconnectWallet, switchNetwork } = useWeb3();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [networkMenuAnchorEl, setNetworkMenuAnchorEl] = useState(null);
+  const [networkAnchorEl, setNetworkAnchorEl] = useState(null);
+  
   const open = Boolean(anchorEl);
-  const networkMenuOpen = Boolean(networkMenuAnchorEl);
   
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
   };
-
+  
   const handleClose = () => {
     setAnchorEl(null);
   };
-
+  
   const handleNetworkMenu = (event) => {
-    setNetworkMenuAnchorEl(event.currentTarget);
+    setNetworkAnchorEl(event.currentTarget);
   };
-
-  const handleNetworkMenuClose = () => {
-    setNetworkMenuAnchorEl(null);
+  
+  const handleNetworkClose = () => {
+    setNetworkAnchorEl(null);
   };
-
-  // 切换到指定网络
-  const switchNetwork = async (networkId) => {
-    if (!window.ethereum) return;
-    
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${networkId.toString(16)}` }],
-      });
-    } catch (error) {
-      console.error('Error switching network:', error);
+  
+  // 获取网络名称
+  const getNetworkName = () => {
+    switch (chainId) {
+      case 1:
+        return 'Ethereum';
+      case 5:
+        return 'Goerli';
+      case 137:
+        return 'Polygon';
+      case 80001:
+        return 'Mumbai';
+      case 56:
+        return 'BSC';
+      case 97:
+        return 'BSC Testnet';
+      case 31337:
+        return 'Localhost';
+      case 1337:
+        return 'Ganache';
+      default:
+        return 'Unknown Network';
     }
-    
-    handleNetworkMenuClose();
   };
-
-  // Format address for display
-  const formatAddress = (address) => {
-    if (!address) return '';
-    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  
+  const networkName = getNetworkName();
+  
+  // 网络切换处理
+  const handleSwitchNetwork = async (targetChainId) => {
+    try {
+      await switchNetwork(targetChainId);
+      handleNetworkClose();
+    } catch (error) {
+      console.error('Failed to switch network:', error);
+    }
   };
-
-  // 获取当前网络名称
-  const networkName = getNetworkName(chainId) || `Chain ID: ${chainId || 'Unknown'}`;
 
   return (
     <AppBar position="static">
       <Toolbar>
         <Typography variant="h6" component={Link} to="/" sx={{ flexGrow: 1, textDecoration: 'none', color: 'white' }}>
-          P2P Lending Platform
+          Fixed Rate Lending Platform
         </Typography>
         
         <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
           <Button color="inherit" component={Link} to="/lending-pool">
             Lending Pool
           </Button>
-          <Button color="inherit" component={Link} to="/p2p-marketplace">
-            P2P Marketplace
+          <Button color="inherit" component={Link} to="/lending-pool-with-lp">
+            Lending Pool (LP)
+          </Button>
+          <Button color="inherit" component={Link} to="/unified-matching">
+            Unified Matching
+          </Button>
+          <Button color="inherit" component={Link} to="/liquidity-mining">
+            Liquidity Mining
           </Button>
           <Button color="inherit" component={Link} to="/my-orders">
             My Orders
@@ -104,59 +116,30 @@ const Navbar = () => {
           </Tooltip>
         )}
         
-        <Menu
-          id="network-menu"
-          anchorEl={networkMenuAnchorEl}
-          open={networkMenuOpen}
-          onClose={handleNetworkMenuClose}
-          MenuListProps={{
-            'aria-labelledby': 'network-button',
-          }}
-        >
-          <MenuItem onClick={() => switchNetwork(1)}>Ethereum Mainnet</MenuItem>
-          <MenuItem onClick={() => switchNetwork(11155111)}>Sepolia Testnet</MenuItem>
-          <Divider />
-          <MenuItem onClick={() => switchNetwork(137)}>Polygon Mainnet</MenuItem>
-          <MenuItem onClick={() => switchNetwork(80001)}>Mumbai Testnet</MenuItem>
-          <Divider />
-          <MenuItem onClick={() => switchNetwork(56)}>Binance Smart Chain</MenuItem>
-          <MenuItem onClick={() => switchNetwork(97)}>BSC Testnet</MenuItem>
-          <Divider />
-          <MenuItem onClick={() => switchNetwork(1337)}>Ganache</MenuItem>
-          <MenuItem onClick={() => switchNetwork(31337)}>Hardhat Network</MenuItem>
-        </Menu>
-        
-        {isConnected ? (
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Chip
-              icon={<AccountBalanceWalletIcon />}
-              label={formatAddress(account)}
-              variant="outlined"
-              onClick={disconnectWallet}
-              color="secondary"
-              sx={{ color: 'white', borderColor: 'white' }}
-            />
-          </Box>
-        ) : (
-          <Button 
-            color="inherit" 
-            variant="outlined" 
-            onClick={connectWallet}
-            startIcon={<AccountBalanceWalletIcon />}
-          >
+        {!isConnected ? (
+          <Button color="inherit" onClick={connectWallet}>
             Connect Wallet
           </Button>
+        ) : (
+          <Tooltip title={`Connected: ${account?.substring(0, 6)}...${account?.substring(account.length - 4)}`}>
+            <Chip
+              label={`${account?.substring(0, 6)}...${account?.substring(account.length - 4)}`}
+              variant="outlined"
+              color="success"
+              onDelete={disconnectWallet}
+              sx={{ color: 'white', borderColor: 'white' }}
+            />
+          </Tooltip>
         )}
         
         <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
           <IconButton
             size="large"
-            edge="end"
-            color="inherit"
             aria-label="menu"
             aria-controls="menu-appbar"
             aria-haspopup="true"
             onClick={handleMenu}
+            color="inherit"
           >
             <MenuIcon />
           </IconButton>
@@ -178,8 +161,14 @@ const Navbar = () => {
             <MenuItem onClick={handleClose} component={Link} to="/lending-pool">
               Lending Pool
             </MenuItem>
-            <MenuItem onClick={handleClose} component={Link} to="/p2p-marketplace">
-              P2P Marketplace
+            <MenuItem onClick={handleClose} component={Link} to="/lending-pool-with-lp">
+              Lending Pool (LP)
+            </MenuItem>
+            <MenuItem onClick={handleClose} component={Link} to="/unified-matching">
+              Unified Matching
+            </MenuItem>
+            <MenuItem onClick={handleClose} component={Link} to="/liquidity-mining">
+              Liquidity Mining
             </MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/my-orders">
               My Orders
@@ -194,4 +183,4 @@ const Navbar = () => {
   );
 };
 
-export default Navbar; 
+export default Navbar;

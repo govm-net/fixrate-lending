@@ -10,7 +10,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log(`Network: ${network.name}`);
 
   // 获取已部署的合约
-  const marketplace = await deployments.get("P2PLendingMarketplace");
+  const matchingEngine = await deployments.get("UnifiedMatchingEngine");
   const lendingPool = await deployments.get("FixedRateLendingPool");
 
   // 检查是否为测试网络
@@ -21,95 +21,67 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
                     network.name === "sepolia" || 
                     network.name === "mumbai";
 
-  // 1. 设置 marketplace 地址到 lending pool
-  console.log(`Setting marketplace address (${marketplace.address}) in lending pool...`);
+  // 1. 设置 matching engine 地址到 lending pool
+  console.log(`Setting matching engine address (${matchingEngine.address}) in lending pool...`);
   
   try {
     // 使用通用方式获取合约实例，避免类型错误
     const lendingPoolContract = await ethers.getContractAt(
-      ["function setMarketplaceAddress(address) external"],
+      ["function setMatchingEngineAddress(address) external"],
       lendingPool.address
     );
     
     // 设置市场地址
-    const tx1 = await lendingPoolContract.setMarketplaceAddress(marketplace.address);
+    const tx1 = await lendingPoolContract.setMatchingEngineAddress(matchingEngine.address);
     await tx1.wait();
-    console.log(`Set marketplace address in lending pool - tx: ${tx1.hash}`);
-  } catch (error: any) {
-    console.error(`Error setting marketplace address:`, error.message || error);
-    console.log(`This might be because the address is already set or you don't have permission.`);
+    console.log(`Successfully set matching engine address in lending pool`);
+  } catch (error) {
+    console.error("Error setting matching engine address in lending pool:", error);
   }
 
-  // 2. 如果是测试网络，配置支持的代币
+  // 2. 如果是测试网络，部署并配置测试代币和预言机
   if (isTestnet) {
+    console.log("Configuring test tokens and price feeds...");
+    
     try {
-      // 获取模拟代币
-      const mockUSDC = await deployments.get("MockUSDC");
-      const mockDAI = await deployments.get("MockDAI");
-      const mockWETH = await deployments.get("MockWETH");
-      const mockWBTC = await deployments.get("MockWBTC");
-
-      // 使用通用方式获取市场合约实例，避免类型错误
-      const marketplaceContract = await ethers.getContractAt(
-        ["function addSupportedToken(address) external"],
-        marketplace.address
-      );
-
-      // 添加支持的代币到市场合约
-      console.log(`Adding supported tokens to marketplace...`);
+      // 获取已部署的测试代币
+      const mockUSDC = await deployments.get("MockToken");
+      const mockWETH = await deployments.get("MockToken");
+      const mockWBTC = await deployments.get("MockToken");
       
-      // 添加USDC
-      try {
-        const tx2 = await marketplaceContract.addSupportedToken(mockUSDC.address);
-        await tx2.wait();
-        console.log(`Added USDC to supported tokens - tx: ${tx2.hash}`);
-      } catch (error: any) {
-        console.log(`USDC might already be added or there was an error:`, error.message || error);
-      }
-
-      // 添加DAI
-      try {
-        const tx3 = await marketplaceContract.addSupportedToken(mockDAI.address);
-        await tx3.wait();
-        console.log(`Added DAI to supported tokens - tx: ${tx3.hash}`);
-      } catch (error: any) {
-        console.log(`DAI might already be added or there was an error:`, error.message || error);
-      }
-
-      // 添加WETH
-      try {
-        const tx4 = await marketplaceContract.addSupportedToken(mockWETH.address);
-        await tx4.wait();
-        console.log(`Added WETH to supported tokens - tx: ${tx4.hash}`);
-      } catch (error: any) {
-        console.log(`WETH might already be added or there was an error:`, error.message || error);
-      }
-
-      // 添加WBTC
-      try {
-        const tx5 = await marketplaceContract.addSupportedToken(mockWBTC.address);
-        await tx5.wait();
-        console.log(`Added WBTC to supported tokens - tx: ${tx5.hash}`);
-      } catch (error: any) {
-        console.log(`WBTC might already be added or there was an error:`, error.message || error);
-      }
-
-      console.log(`Token configuration completed!`);
-    } catch (error: any) {
-      console.error(`Error configuring tokens:`, error.message || error);
-      console.log(`Make sure mock tokens are deployed before running this script.`);
-      console.log(`You can deploy mock tokens with: npx hardhat deploy --tags MockTokens`);
+      // 获取已部署的价格预言机
+      const usdcPriceFeed = await deployments.get("MockPriceFeed");
+      const wethPriceFeed = await deployments.get("MockPriceFeed");
+      const wbtcPriceFeed = await deployments.get("MockPriceFeed");
+      
+      // 添加支持的代币到借贷池
+      const lendingPoolWithAbi = await ethers.getContractAt(
+        ["function addSupportedToken(address, address) external"],
+        lendingPool.address
+      );
+      
+      console.log("Adding USDC to lending pool...");
+      const tx2 = await lendingPoolWithAbi.addSupportedToken(mockUSDC.address, usdcPriceFeed.address);
+      await tx2.wait();
+      
+      console.log("Adding WETH to lending pool...");
+      const tx3 = await lendingPoolWithAbi.addSupportedToken(mockWETH.address, wethPriceFeed.address);
+      await tx3.wait();
+      
+      console.log("Adding WBTC to lending pool...");
+      const tx4 = await lendingPoolWithAbi.addSupportedToken(mockWBTC.address, wbtcPriceFeed.address);
+      await tx4.wait();
+      
+      console.log("Successfully configured test tokens and price feeds");
+    } catch (error) {
+      console.error("Error configuring test tokens and price feeds:", error);
     }
   }
 
-  console.log(`Contract configuration completed!`);
+  console.log("Contract configuration completed!");
 };
 
 func.tags = ["Configure", "All"];
-func.dependencies = ["Marketplace", "LendingPool"]; // 确保在配置前已部署市场和借贷池合约
-func.skip = async (hre) => {
-  // 如果明确指定不配置合约，则跳过
-  return process.env.CONFIGURE_CONTRACTS === "false";
-};
+func.dependencies = ["MatchingEngine", "LendingPool"];
 
-export default func; 
+export default func;

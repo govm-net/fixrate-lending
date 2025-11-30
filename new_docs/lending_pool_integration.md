@@ -4,12 +4,18 @@
 
 借贷池集成方案是将传统的点对点借贷扩展为支持资金池的混合型借贷模式。该方案允许用户将资产存入资金池获得利息，同时也支持从资金池借款，提高了资金利用率和流动性。
 
+LendingPool作为资金提供方，与UnifiedMatchingEngine配合工作，为借款人提供流动性支持。PoolChecker负责验证池交易的合规性，确保资金安全。
+
 ## 2. 设计目标
 
 1. 实现资金池与撮合引擎的无缝集成
 2. 支持池化资金的出借和借款功能
 3. 确保资金池的安全性和稳定性
 4. 提供灵活的池参数配置机制
+5. 实现高效的收益分配机制
+6. 支持多种资产类型的池化管理
+7. 提供完整的资金流动跟踪
+8. 实现模块化设计，便于扩展和维护
 
 ## 3. 集成流程图
 
@@ -73,6 +79,16 @@ struct UserDeposit {
 }
 ```
 
+#### 3.2.3 LP Token信息
+```solidity
+struct LPTokenInfo {
+    address lpTokenAddress;     // LP Token合约地址
+    string name;                // LP Token名称
+    string symbol;              // LP Token符号
+    uint8 decimals;             // 小数位数
+}
+```
+
 ## 4. LendingPool合约设计
 
 ### 4.1 核心功能
@@ -104,7 +120,7 @@ sequenceDiagram
 ```solidity
 function withdraw(address token, uint256 amount) external
 ```
-用户从资金池提取资产， burning相应的份额凭证。
+用户从资金池提取资产，burning相应的份额凭证。
 
 下面的时序图展示了提款流程：
 
@@ -203,6 +219,11 @@ function getUserDeposit(address token, address user) external view returns (User
 function calculateWithdrawAmount(address token, uint256 shareAmount) external view returns (uint256)
 ```
 
+#### 4.2.4 获取LP Token信息
+```solidity
+function getLPTokenInfo(address token) external view returns (LPTokenInfo memory)
+```
+
 ## 5. PoolChecker实现
 
 ### 5.1 功能特点
@@ -254,6 +275,11 @@ function validatePoolParams(
 3. 借款人 -> LendingPool (还款)
 4. LendingPool -> 存款人 (提款)
 
+### 6.3 状态同步
+1. 订单状态由UnifiedMatchingEngine管理
+2. 资金状态由LendingPool管理
+3. 通过事件机制实现状态同步
+
 ## 7. 收益分配机制
 
 ### 7.1 利息计算
@@ -264,6 +290,11 @@ function calculateInterest(address token, address user) internal view returns (u
 
 ### 7.2 收益累积
 收益实时累积到用户的存款中，用户提款时自动结算。
+
+### 7.3 收益查询
+```solidity
+function getPendingInterest(address token, address user) external view returns (uint256)
+```
 
 ## 8. 安全机制
 
@@ -292,6 +323,15 @@ function calculateInterest(address token, address user) internal view returns (u
 - LoanFromPool: 从池中出借资金
 - RepayToPool: 向池中还款
 - PoolParamsUpdated: 池参数更新
+- LPTokenCreated: LP Token创建
+
+### 9.2 事件结构
+```solidity
+event Deposit(address indexed token, address indexed depositor, uint256 amount, uint256 shares);
+event Withdraw(address indexed token, address indexed withdrawer, uint256 amount, uint256 sharesBurned);
+event LoanFromPool(bytes32 indexed orderHash, address indexed borrower, address lendToken, uint256 lendAmount);
+event RepayToPool(bytes32 indexed orderHash, address indexed borrower, address lendToken, uint256 repayAmount);
+```
 
 ## 10. 部署架构
 
@@ -306,3 +346,9 @@ function calculateInterest(address token, address user) internal view returns (u
 - 添加支持的代币和预言机地址
 - 设置最低利率、最大期限等参数
 - 设置管理员权限
+- 配置初始资金池
+
+### 10.3 升级机制
+- 支持合约升级
+- 支持参数动态调整
+- 支持新增资产类型

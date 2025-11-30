@@ -10,6 +10,7 @@ import "./tasks/mint-test-tokens";
 import "./tasks/update-frontend-config";
 import "./tasks/deploy-and-update";
 import "./tasks/deploy-update-mint";
+import "./tasks/add-mining-pool";
 
 dotenv.config();
 
