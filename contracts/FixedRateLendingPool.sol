@@ -25,6 +25,9 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     // 池中资金余额
     mapping(address => uint256) public poolBalance;
     
+    // 每个用户在池中的存款余额
+    mapping(address => mapping(address => uint256)) public userDeposits;
+    
     // 池中总借出金额
     mapping(address => uint256) public totalBorrowed;
     
@@ -176,6 +179,9 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
         // 更新池余额
         poolBalance[_token] += _amount;
         
+        // 记录用户的存款金额
+        userDeposits[_token][msg.sender] += _amount;
+        
         emit Deposited(_token, msg.sender, _amount);
     }
 
@@ -184,13 +190,20 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
      * @param _token 代币地址
      * @param _amount 提款金额
      */
-    function withdraw(address _token, uint256 _amount) external onlyOwner nonReentrant {
+    function withdraw(address _token, uint256 _amount) external nonReentrant {
         require(supportedTokens[_token], "Token not supported");
         require(_amount > 0, "Amount must be greater than 0");
         
-        // 计算可提取金额（总余额 - 已借出）
+        // 计算用户可提取金额
+        uint256 userDeposit = userDeposits[_token][msg.sender];
+        require(_amount <= userDeposit, "Insufficient user deposit");
+        
+        // 计算池中可提取金额（总余额 - 已借出）
         uint256 availableAmount = poolBalance[_token] - totalBorrowed[_token];
         require(_amount <= availableAmount, "Insufficient available balance");
+        
+        // 更新用户存款余额
+        userDeposits[_token][msg.sender] -= _amount;
         
         // 更新池余额
         poolBalance[_token] -= _amount;
@@ -413,6 +426,16 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     }
 
     /**
+     * @dev 获取用户在池中的存款余额
+     * @param _token 代币地址
+     * @param _user 用户地址
+     * @return 用户存款余额
+     */
+    function getUserDeposit(address _token, address _user) external view returns (uint256) {
+        return userDeposits[_token][_user];
+    }
+
+    /**
      * @dev 检查订单是否活跃
      * @param _orderHash 订单哈希
      * @return 是否活跃
@@ -420,4 +443,4 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, ILendingPool {
     function isOrderActive(bytes32 _orderHash) external view returns (bool) {
         return activeOrders[_orderHash];
     }
-} 
+}
