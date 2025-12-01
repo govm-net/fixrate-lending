@@ -106,74 +106,6 @@ describe("UnifiedMatchingEngine", function () {
         .to.be.reverted;
     });
 
-    it("应该不能使用未授权的 Checker 合约发起借款请求", async function () {
-      // 部署一个新的未授权 Checker 合约
-      const UnauthorizedChecker = await ethers.getContractFactory("PersonalChecker");
-      const unauthorizedChecker = await UnauthorizedChecker.deploy();
-      
-      // 获取当前区块时间戳
-      const blockNumBefore = await ethers.provider.getBlockNumber();
-      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
-      const currentTimestamp = blockBefore.timestamp;
-      
-      // 设置过期时间为当前区块时间 + 1小时
-      const expiry = currentTimestamp + oneHour;
-      
-      // 创建订单参数
-      const orderParams = {
-        checker: await unauthorizedChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: 1,
-        signature: "0x"
-      };
-      
-      // 尝试使用未授权的 Checker 合约发起借款请求
-      await expect(unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams))
-        .to.be.revertedWith("Checker not authorized");
-    });
-
-    it("应该不能使用未授权的 Checker 合约发起出借请求", async function () {
-      // 部署一个新的未授权 Checker 合约
-      const UnauthorizedChecker = await ethers.getContractFactory("PersonalChecker");
-      const unauthorizedChecker = await UnauthorizedChecker.deploy();
-      
-      // 获取当前区块时间戳
-      const blockNumBefore = await ethers.provider.getBlockNumber();
-      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
-      const currentTimestamp = blockBefore.timestamp;
-      
-      // 设置过期时间为当前区块时间 + 1小时
-      const expiry = currentTimestamp + oneHour;
-      
-      // 创建订单参数
-      const orderParams = {
-        checker: await unauthorizedChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: 1,
-        signature: "0x"
-      };
-      
-      // 尝试使用未授权的 Checker 合约发起出借请求
-      await expect(unifiedMatching.connect(lender).initiateLendRequest(orderParams))
-        .to.be.revertedWith("Checker not authorized");
-    });
-
     it("应该不能使用未授权的 Checker 合约执行借款交易", async function () {
       // 部署一个新的未授权 Checker 合约
       const UnauthorizedChecker = await ethers.getContractFactory("PersonalChecker");
@@ -240,176 +172,6 @@ describe("UnifiedMatchingEngine", function () {
       // 尝试使用未授权的 Checker 合约执行出借交易
       await expect(unifiedMatching.connect(borrower).executeLend(orderParams))
         .to.be.revertedWith("Checker not authorized");
-    });
-  });
-
-  describe("借款请求", function () {
-    let nonce;
-    let expiry;
-    
-    beforeEach(async function () {
-      nonce = 1;
-      // 获取当前区块时间戳
-      const blockNumBefore = await ethers.provider.getBlockNumber();
-      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
-      const currentTimestamp = blockBefore.timestamp;
-      
-      // 设置过期时间为当前区块时间 + 1小时
-      expiry = currentTimestamp + oneHour;
-    });
-
-    it("应该能够发起借款请求", async function () {
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      await expect(unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams))
-        .to.emit(unifiedMatching, "BorrowRequestInitiated");
-    });
-
-    it("不应该允许使用已使用的nonce", async function () {
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      // 第一次使用nonce
-      await unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams);
-      
-      // 尝试再次使用相同的nonce
-      await expect(
-        unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams)
-      ).to.be.revertedWith("Nonce already used");
-    });
-
-    it("不应该允许过期的订单", async function () {
-      // 设置过期时间为过去
-      const pastExpiry = Math.floor(Date.now() / 1000) - 60; // 1分钟前
-      
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: pastExpiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      await expect(
-        unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams)
-      ).to.be.revertedWith("Order has expired");
-    });
-  });
-
-  describe("出借请求", function () {
-    let nonce;
-    let expiry;
-    
-    beforeEach(async function () {
-      nonce = 1;
-      // 获取当前区块时间戳
-      const blockNumBefore = await ethers.provider.getBlockNumber();
-      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
-      const currentTimestamp = blockBefore.timestamp;
-      
-      // 设置过期时间为当前区块时间 + 1小时
-      expiry = currentTimestamp + oneHour;
-    });
-
-    it("应该能够发起出借请求", async function () {
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      await expect(unifiedMatching.connect(lender).initiateLendRequest(orderParams))
-        .to.emit(unifiedMatching, "LendRequestInitiated");
-    });
-
-    it("不应该允许使用已使用的nonce", async function () {
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: expiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      // 第一次使用nonce
-      await unifiedMatching.connect(lender).initiateLendRequest(orderParams);
-      
-      // 尝试再次使用相同的nonce
-      await expect(
-        unifiedMatching.connect(lender).initiateLendRequest(orderParams)
-      ).to.be.revertedWith("Nonce already used");
-    });
-
-    it("不应该允许过期的订单", async function () {
-      // 设置过期时间为过去
-      const pastExpiry = Math.floor(Date.now() / 1000) - 60; // 1分钟前
-      
-      const orderParams = {
-        checker: await personalChecker.getAddress(),
-        lender: lender.address,
-        borrower: borrower.address,
-        lendToken: await tokenA.getAddress(),
-        lendAmount: lendAmount,
-        collateralToken: await tokenB.getAddress(),
-        collateralAmount: collateralAmount,
-        interestRate: interestRate,
-        duration: loanDuration,
-        expiry: pastExpiry,
-        nonce: nonce,
-        signature: "0x"
-      };
-      
-      await expect(
-        unifiedMatching.connect(lender).initiateLendRequest(orderParams)
-      ).to.be.revertedWith("Order has expired");
     });
   });
 
@@ -534,24 +296,12 @@ describe("UnifiedMatchingEngine", function () {
     });
 
     it("应该能够匹配和执行订单", async function () {
-      // 发起借款请求
-      await unifiedMatching.connect(borrower).initiateBorrowRequest(borrowOrderParams);
-      
-      // 发起出借请求
-      await unifiedMatching.connect(lender).initiateLendRequest(lendOrderParams);
-      
       // 执行借款交易
       await expect(unifiedMatching.connect(lender).executeBorrow(borrowOrderParams))
         .to.emit(unifiedMatching, "BorrowExecuted");
     });
 
     it("应该能够在订单执行后更新状态", async function () {
-      // 发起借款请求
-      await unifiedMatching.connect(borrower).initiateBorrowRequest(borrowOrderParams);
-      
-      // 发起出借请求
-      await unifiedMatching.connect(lender).initiateLendRequest(lendOrderParams);
-      
       // 执行借款交易
       await unifiedMatching.connect(lender).executeBorrow(borrowOrderParams);
       
@@ -608,7 +358,7 @@ describe("UnifiedMatchingEngine", function () {
       // 尝试使用 PoolChecker 发起借款请求
       // 注意：由于 lending pool 没有正确设置，这可能会失败，但我们至少测试它可以被调用
       try {
-        await unifiedMatching.connect(borrower).initiateBorrowRequest(orderParams);
+        await unifiedMatching.connect(lender).executeBorrow(orderParams);
       } catch (error) {
         // 期望出现与池验证相关的错误，而不是 Checker 未授权的错误
         expect(error.message).to.not.include("Checker not authorized");
