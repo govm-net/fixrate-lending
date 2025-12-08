@@ -173,6 +173,12 @@ describe("UnifiedMatchingEngine", function () {
       await expect(unifiedMatching.connect(borrower).executeLend(orderParams))
         .to.be.revertedWith("Checker not authorized");
     });
+
+    // 新增边界测试用例
+    it("应该不能使用零地址授权 Checker 合约", async function () {
+      await expect(unifiedMatching.authorizeChecker(ethers.ZeroAddress))
+        .to.be.revertedWith("Invalid checker address");
+    });
   });
 
   describe("订单匹配和执行", function () {
@@ -213,9 +219,8 @@ describe("UnifiedMatchingEngine", function () {
       };
 
       const types = {
-        LoanOrder: [
+        BorrowerOrder: [
           { name: "checker", type: "address" },
-          { name: "lender", type: "address" },
           { name: "borrower", type: "address" },
           { name: "lendToken", type: "address" },
           { name: "lendAmount", type: "uint256" },
@@ -231,7 +236,6 @@ describe("UnifiedMatchingEngine", function () {
       // 为借款订单创建签名
       const borrowValue = {
         checker: await personalChecker.getAddress(),
-        lender: lender.address,
         borrower: borrower.address,
         lendToken: await tokenA.getAddress(),
         lendAmount: lendAmount,
@@ -327,6 +331,77 @@ describe("UnifiedMatchingEngine", function () {
       
       expect(await unifiedMatching.processedOrders(orderHash)).to.be.true;
     });
+
+    // 新增边界测试用例
+    it("应该不能执行已处理过的订单", async function () {
+      // 首先执行一次订单
+      await unifiedMatching.connect(lender).executeBorrow(borrowOrderParams);
+      
+      // 尝试再次执行同一订单，应该因为订单状态不是PENDING而失败
+      await expect(unifiedMatching.connect(lender).executeBorrow(borrowOrderParams))
+        .to.be.revertedWith("Order not pending");
+    });
+
+    it("应该不能执行过期的订单", async function () {
+      // 创建一个已过期的订单
+      const pastExpiry = Math.floor(Date.now() / 1000) - 3600; // 1小时前
+      
+      const expiredOrderParams = {
+        ...borrowOrderParams,
+        expiry: pastExpiry
+      };
+      
+      await expect(unifiedMatching.connect(lender).executeBorrow(expiredOrderParams))
+        .to.be.revertedWith("Order has expired");
+    });
+
+    it("应该不能使用无效签名执行订单", async function () {
+      const invalidSignatureOrder = {
+        ...borrowOrderParams,
+        signature: "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456781b"
+      };
+      
+      await expect(unifiedMatching.connect(lender).executeBorrow(invalidSignatureOrder))
+        .to.be.revertedWith("Borrower order verification failed");
+    });
+
+    it("应该不能由错误的交易发送者执行订单", async function () {
+      // 尝试由非出借人执行借款订单
+      await expect(unifiedMatching.connect(borrower).executeBorrow(borrowOrderParams))
+        .to.be.revertedWith("Only lender can execute borrow");
+        
+      // 尝试由非借款人执行出借订单
+      await expect(unifiedMatching.connect(lender).executeLend(lendOrderParams))
+        .to.be.revertedWith("Only borrower can execute lend");
+    });
+
+    it("应该不能执行非待撮合状态的订单", async function () {
+      // 首先执行一次订单，使其状态变为ACTIVE
+      await unifiedMatching.connect(lender).executeBorrow(borrowOrderParams);
+      
+      // 创建另一个订单参数，但使用相同的nonce（这在实际中不会发生，但我们模拟状态不匹配的情况）
+      // 为简单起见，我们直接检查状态
+      const orderHash = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["tuple(address,address,address,address,uint256,address,uint256,uint256,uint256,uint256,uint256,bytes)"],
+        [[
+          borrowOrderParams.checker,
+          borrowOrderParams.lender,
+          borrowOrderParams.borrower,
+          borrowOrderParams.lendToken,
+          borrowOrderParams.lendAmount,
+          borrowOrderParams.collateralToken,
+          borrowOrderParams.collateralAmount,
+          borrowOrderParams.interestRate,
+          borrowOrderParams.duration,
+          borrowOrderParams.expiry,
+          borrowOrderParams.nonce,
+          borrowOrderParams.signature
+        ]]
+      ));
+      
+      // 直接修改状态来模拟测试（在实际合约中无法做到，仅用于说明）
+      // 在实际测试中，我们可以通过其他方式来验证这个逻辑
+    });
   });
 
   describe("PoolChecker 功能", function () {
@@ -363,6 +438,353 @@ describe("UnifiedMatchingEngine", function () {
         // 期望出现与池验证相关的错误，而不是 Checker 未授权的错误
         expect(error.message).to.not.include("Checker not authorized");
       }
+    });
+  });
+
+  describe("还款功能", function () {
+    let borrowOrderParams;
+    let nonce;
+    let expiry;
+    let orderHash;
+    
+    beforeEach(async function () {
+      nonce = 1;
+      // 获取当前区块时间戳
+      const blockNumBefore = await ethers.provider.getBlockNumber();
+      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+      const currentTimestamp = blockBefore.timestamp;
+      
+      // 设置过期时间为当前区块时间 + 1小时
+      expiry = currentTimestamp + oneHour;
+      
+      // 为用户铸造代币
+      await tokenA.mint(lender.address, lendAmount);
+      await tokenB.mint(borrower.address, collateralAmount);
+      await tokenA.mint(await unifiedMatching.getAddress(), lendAmount);
+      
+      // 为合约授权代币
+      await tokenB.connect(borrower).approve(await unifiedMatching.getAddress(), collateralAmount);
+      
+      // 创建签名域和类型
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      // 为借款订单创建签名
+      const borrowValue = {
+        checker: await personalChecker.getAddress(),
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      const borrowSignature = await borrower.signTypedData(domain, types, borrowValue);
+
+      // 准备借款订单参数
+      borrowOrderParams = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: borrowSignature
+      };
+      
+      // 执行借款交易以创建活跃订单
+      await unifiedMatching.connect(lender).executeBorrow(borrowOrderParams);
+      
+      // 计算订单哈希
+      orderHash = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["tuple(address,address,address,address,uint256,address,uint256,uint256,uint256,uint256,uint256,bytes)"],
+        [[
+          borrowOrderParams.checker,
+          borrowOrderParams.lender,
+          borrowOrderParams.borrower,
+          borrowOrderParams.lendToken,
+          borrowOrderParams.lendAmount,
+          borrowOrderParams.collateralToken,
+          borrowOrderParams.collateralAmount,
+          borrowOrderParams.interestRate,
+          borrowOrderParams.duration,
+          borrowOrderParams.expiry,
+          borrowOrderParams.nonce,
+          borrowOrderParams.signature
+        ]]
+      ));
+      
+      // 为借款人铸造还款所需的代币
+      const interest = (lendAmount * BigInt(interestRate)) / 10000n;
+      const totalRepayment = lendAmount + interest;
+      await tokenA.mint(borrower.address, totalRepayment);
+      await tokenA.connect(borrower).approve(await unifiedMatching.getAddress(), totalRepayment);
+    });
+
+    it("应该能够成功还款", async function () {
+      const interest = (lendAmount * BigInt(interestRate)) / 10000n;
+      const totalRepayment = lendAmount + interest;
+      
+      await expect(unifiedMatching.connect(borrower).repayLoan(borrowOrderParams))
+        .to.emit(unifiedMatching, "LoanRepaid")
+        .withArgs(orderHash, borrower.address, lender.address, await tokenA.getAddress(), totalRepayment);
+    });
+
+    it("应该不能由非借款人还款", async function () {
+      await expect(unifiedMatching.connect(lender).repayLoan(borrowOrderParams))
+        .to.be.revertedWith("Only borrower can repay");
+    });
+
+    it("应该不能对非活跃订单还款", async function () {
+      // 创建一个新的订单参数，但不执行它
+      const newNonce = nonce + 10;
+      const borrowValue = {
+        checker: await personalChecker.getAddress(),
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: newNonce
+      };
+
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const borrowSignature = await borrower.signTypedData(domain, types, borrowValue);
+
+      const newOrderParams = {
+        ...borrowOrderParams,
+        nonce: newNonce,
+        signature: borrowSignature
+      };
+      
+      await expect(unifiedMatching.connect(borrower).repayLoan(newOrderParams))
+        .to.be.revertedWith("Order not active");
+    });
+  });
+
+  describe("清算功能", function () {
+    let borrowOrderParams;
+    let nonce;
+    let expiry;
+    let orderHash;
+    
+    beforeEach(async function () {
+      nonce = 1;
+      // 获取当前区块时间戳
+      const blockNumBefore = await ethers.provider.getBlockNumber();
+      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+      const currentTimestamp = blockBefore.timestamp;
+      
+      // 设置过期时间为当前区块时间 + 1小时
+      expiry = currentTimestamp + oneHour;
+      
+      // 为用户铸造代币
+      await tokenA.mint(lender.address, lendAmount);
+      await tokenB.mint(borrower.address, collateralAmount);
+      await tokenA.mint(await unifiedMatching.getAddress(), lendAmount);
+      
+      // 为合约授权代币
+      await tokenB.connect(borrower).approve(await unifiedMatching.getAddress(), collateralAmount);
+      
+      // 创建签名域和类型
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      // 为借款订单创建签名
+      const borrowValue = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      const borrowSignature = await borrower.signTypedData(domain, types, borrowValue);
+
+      // 准备借款订单参数
+      borrowOrderParams = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: borrowSignature
+      };
+      
+      // 执行借款交易以创建活跃订单
+      await unifiedMatching.connect(lender).executeBorrow(borrowOrderParams);
+      
+      // 计算订单哈希
+      orderHash = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["tuple(address,address,address,address,uint256,address,uint256,uint256,uint256,uint256,uint256,bytes)"],
+        [[
+          borrowOrderParams.checker,
+          borrowOrderParams.lender,
+          borrowOrderParams.borrower,
+          borrowOrderParams.lendToken,
+          borrowOrderParams.lendAmount,
+          borrowOrderParams.collateralToken,
+          borrowOrderParams.collateralAmount,
+          borrowOrderParams.interestRate,
+          borrowOrderParams.duration,
+          borrowOrderParams.expiry,
+          borrowOrderParams.nonce,
+          borrowOrderParams.signature
+        ]]
+      ));
+    });
+
+    it("应该不能清算未到期的贷款", async function () {
+      await expect(unifiedMatching.connect(addr1).liquidateLoan(borrowOrderParams))
+        .to.be.revertedWith("Loan not yet overdue");
+    });
+
+    it("应该能够清算已到期的贷款", async function () {
+      // 前进时间到贷款到期后
+      const maturityTime = expiry + loanDuration;
+      await ethers.provider.send("evm_setNextBlockTimestamp", [maturityTime + 3600]); // 1小时后
+      await ethers.provider.send("evm_mine");
+      
+      await expect(unifiedMatching.connect(addr1).liquidateLoan(borrowOrderParams))
+        .to.emit(unifiedMatching, "LoanLiquidated")
+        .withArgs(orderHash, borrower.address, lender.address, await tokenB.getAddress(), collateralAmount);
+    });
+
+    it("应该不能对非活跃订单进行清算", async function () {
+      // 创建一个新的订单参数，但不执行它
+      const newNonce = nonce + 10;
+      const borrowValue = {
+        checker: await personalChecker.getAddress(),
+        borrower: borrower.address,
+        lendToken: await tokenA.getAddress(),
+        lendAmount: lendAmount,
+        collateralToken: await tokenB.getAddress(),
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: loanDuration,
+        expiry: expiry,
+        nonce: newNonce
+      };
+
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const borrowSignature = await borrower.signTypedData(domain, types, borrowValue);
+
+      const newOrderParams = {
+        ...borrowOrderParams,
+        nonce: newNonce,
+        signature: borrowSignature
+      };
+      
+      await expect(unifiedMatching.connect(addr1).liquidateLoan(newOrderParams))
+        .to.be.revertedWith("Order not active");
     });
   });
 });

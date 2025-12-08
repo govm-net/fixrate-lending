@@ -270,14 +270,13 @@ contract FixedRateLendingPool is Ownable, ReentrancyGuard, IChecker {
     function calculateTokenValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 price = getTokenPrice(_token);
         // 获取价格预言机的小数位数
-        // uint8 decimals = AggregatorV3Interface(tokenPriceFeeds[_token]).decimals();
+        uint8 priceDecimals = AggregatorV3Interface(tokenPriceFeeds[_token]).decimals();
         
         // 获取代币小数位数
         uint8 tokenDecimals = IERC20Metadata(_token).decimals();
         
         // 计算价值：价格 * 数量 / 10^(代币小数位数)
-        // 价格已经是 10^decimals 精度
-        return (price * _amount) / (10 ** tokenDecimals);
+        return (price * _amount) / (10 ** (tokenDecimals - priceDecimals));
     }
 
     /**

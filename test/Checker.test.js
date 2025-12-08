@@ -62,10 +62,9 @@ describe("Checker Contracts", function () {
       };
 
       const types = {
-        LoanOrder: [
+        LenderOrder: [
           { name: "checker", type: "address" },
           { name: "lender", type: "address" },
-          { name: "borrower", type: "address" },
           { name: "lendToken", type: "address" },
           { name: "lendAmount", type: "uint256" },
           { name: "collateralToken", type: "address" },
@@ -80,7 +79,6 @@ describe("Checker Contracts", function () {
       const value = {
         checker: await personalChecker.getAddress(),
         lender: lender.address,
-        borrower: borrower.address,
         lendToken: lendToken,
         lendAmount: lendAmount,
         collateralToken: collateralToken,
@@ -134,9 +132,8 @@ describe("Checker Contracts", function () {
       };
 
       const types = {
-        LoanOrder: [
+        BorrowerOrder: [
           { name: "checker", type: "address" },
-          { name: "lender", type: "address" },
           { name: "borrower", type: "address" },
           { name: "lendToken", type: "address" },
           { name: "lendAmount", type: "uint256" },
@@ -151,7 +148,6 @@ describe("Checker Contracts", function () {
 
       const value = {
         checker: await personalChecker.getAddress(),
-        lender: lender.address,
         borrower: borrower.address,
         lendToken: lendToken,
         lendAmount: lendAmount,
@@ -182,6 +178,417 @@ describe("Checker Contracts", function () {
       };
 
       expect(await personalChecker.verifyBorrowerOrder(params)).to.be.true;
+    });
+
+    // 新增边界测试用例
+    it("Should return false for lender order with invalid signature", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      // Create an invalid signature (65 bytes with invalid v value)
+      const invalidSignature = "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456781c";
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: invalidSignature
+      };
+
+      expect(await personalChecker.verifyLenderOrder(params)).to.be.false;
+    });
+
+    it("Should return false for borrower order with invalid signature", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      // Create an invalid signature (65 bytes with invalid v value)
+      const invalidSignature = "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456781c";
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: invalidSignature
+      };
+
+      expect(await personalChecker.verifyBorrowerOrder(params)).to.be.false;
+    });
+
+    it("Should return false for lender order with expired timestamp", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+      const nonce = 1;
+
+      // Create signature
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        LenderOrder: [
+          { name: "checker", type: "address" },
+          { name: "lender", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const value = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      const signature = await lender.signTypedData(domain, types, value);
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: signature
+      };
+
+      expect(await personalChecker.verifyLenderOrder(params)).to.be.false;
+    });
+
+    it("Should return false for borrower order with expired timestamp", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+      const nonce = 1;
+
+      // Create signature
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const value = {
+        checker: await personalChecker.getAddress(),
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      const signature = await borrower.signTypedData(domain, types, value);
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: signature
+      };
+
+      expect(await personalChecker.verifyBorrowerOrder(params)).to.be.false;
+    });
+
+    it("Should return false for lender order with empty signature", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: "0x"
+      };
+
+      expect(await personalChecker.verifyLenderOrder(params)).to.be.false;
+    });
+
+    it("Should return false for borrower order with empty signature", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: "0x"
+      };
+
+      expect(await personalChecker.verifyBorrowerOrder(params)).to.be.false;
+    });
+
+    it("Should return false for lender order with wrong signer", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const wrongSigner = addr2; // Using borrower as the wrong signer
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      // Create signature with wrong signer
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        LenderOrder: [
+          { name: "checker", type: "address" },
+          { name: "lender", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const value = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      // Sign with wrong signer
+      const signature = await wrongSigner.signTypedData(domain, types, value);
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: signature
+      };
+
+      expect(await personalChecker.verifyLenderOrder(params)).to.be.false;
+    });
+
+    it("Should return false for borrower order with wrong signer", async function () {
+      // Create test data
+      const lender = addr1;
+      const borrower = addr2;
+      const wrongSigner = addr1; // Using lender as the wrong signer
+      const lendToken = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+      const lendAmount = ethers.parseEther("100");
+      const collateralToken = "0xa0b86a33e6441b8435b662c8d8b0b8b8b8b8b8b8";
+      const collateralAmount = ethers.parseEther("150");
+      const interestRate = 1000; // 10%
+      const duration = 30 * 24 * 60 * 60; // 30 days
+      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const nonce = 1;
+
+      // Create signature with wrong signer
+      const domain = {
+        name: "PersonalChecker",
+        version: "1",
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        verifyingContract: await personalChecker.getAddress()
+      };
+
+      const types = {
+        BorrowerOrder: [
+          { name: "checker", type: "address" },
+          { name: "borrower", type: "address" },
+          { name: "lendToken", type: "address" },
+          { name: "lendAmount", type: "uint256" },
+          { name: "collateralToken", type: "address" },
+          { name: "collateralAmount", type: "uint256" },
+          { name: "interestRate", type: "uint256" },
+          { name: "duration", type: "uint256" },
+          { name: "expiry", type: "uint256" },
+          { name: "nonce", type: "uint256" }
+        ]
+      };
+
+      const value = {
+        checker: await personalChecker.getAddress(),
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce
+      };
+
+      // Sign with wrong signer
+      const signature = await wrongSigner.signTypedData(domain, types, value);
+
+      const params = {
+        checker: await personalChecker.getAddress(),
+        lender: lender.address,
+        borrower: borrower.address,
+        lendToken: lendToken,
+        lendAmount: lendAmount,
+        collateralToken: collateralToken,
+        collateralAmount: collateralAmount,
+        interestRate: interestRate,
+        duration: duration,
+        expiry: expiry,
+        nonce: nonce,
+        signature: signature
+      };
+
+      expect(await personalChecker.verifyBorrowerOrder(params)).to.be.false;
     });
   });
 

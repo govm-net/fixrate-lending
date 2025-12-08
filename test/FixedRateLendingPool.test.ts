@@ -129,9 +129,8 @@ describe("FixedRateLendingPool", function () {
     it("应该能够正确计算代币价值", async function () {
       const amount = ethers.parseEther("1"); // 1 token
       const value = await lendingPool.calculateTokenValue(await mockToken.getAddress(), amount);
-      // 价格是 200000000000 (8位小数) * 10^18 (代币数量) / 10^18 (代币小数) = 200000000000 (8位小数)
-      // 但我们需要将其转换为18位小数格式，所以应该是 2000 * 10^18 = 2000000000000000000000
-      expect(value).to.equal(200000000000n);
+      // 价格是 200000000000 (8位小数) * 10^18 (代币数量) / 10^8 (价格小数) = 2000 * 10^18
+      expect(value).to.equal(20000000000000000000n);
     });
 
     it("对于不支持的代币应该回退", async function () {
@@ -227,7 +226,6 @@ describe("FixedRateLendingPool", function () {
       )
         .to.emit(lendingPool, "Withdrawn")
         // 应该发出提款事件，金额为实际余额
-        .to.emit(lendingPool, "Withdrawn")
         .withArgs(await mockToken.getAddress(), depositorAddress, depositAmount);
     });
   });

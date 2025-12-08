@@ -156,6 +156,12 @@ function getCheckerInfo() external view returns (string memory name, string memo
 #### 5.2.1 签名验证
 根据调用的接口（verifyLenderOrder或verifyBorrowerOrder），在需要时验证相应方的签名是否有效，确保订单的真实性。在借方签名、贷方提交上链的情况下，调用verifyLenderOrder时不再验证贷方签名；在贷方签名、借方提交上链的情况下，调用verifyBorrowerOrder时不再验证借方签名。每个签名只生效一次，撮合合约会记录lender+nonce或borrower+nonce的状态为true，下次尝试再使用它，会因为已经为true而出错。
 
+PersonalChecker使用不同的类型哈希来区分贷款订单和借款订单：
+- `LENDER_ORDER_TYPEHASH`: 用于出借人订单签名，不包含borrower字段，方便平台按需撮合
+- `BORROWER_ORDER_TYPEHASH`: 用于借款人订单签名，不包含lender字段，方便平台按需撮合
+
+这种设计确保了贷款和借款订单使用不同的签名结构，提高了安全性，并且允许平台灵活地进行撮合。
+
 下面的时序图展示了PersonalChecker在个人对个人交易中的验证流程：
 
 ```mermaid
