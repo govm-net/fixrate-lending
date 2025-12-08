@@ -345,8 +345,17 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         uint256 interest = (order.lendAmount * order.interestRate) / 10000;
         uint256 totalRepayment = order.lendAmount + interest;
         
-        // 转移还款代币给出借人
-        IERC20(order.lendToken).safeTransferFrom(order.borrower, order.lender, totalRepayment);
+        // 计算手续费 (利息的10%)
+        uint256 fee = interest / 10;
+        
+        // 实际转给出借人的金额
+        uint256 amountToLender = totalRepayment - fee;
+        
+        // 转移还款代币给出借人（扣除手续费后）
+        IERC20(order.lendToken).safeTransferFrom(order.borrower, order.lender, amountToLender);
+        
+        // 转移手续费到合约所有者
+        IERC20(order.lendToken).safeTransferFrom(order.borrower, owner(), fee);
         
         // 返还抵押品给借款人
         IERC20(order.collateralToken).safeTransfer(order.borrower, order.collateralAmount);
@@ -381,8 +390,17 @@ contract UnifiedMatchingEngine is Ownable, ReentrancyGuard, Pausable {
         // 验证是否逾期
         require(block.timestamp > maturityTime, "Loan not yet overdue");
         
-        // 将抵押品转给出借人
-        IERC20(order.collateralToken).safeTransfer(order.lender, order.collateralAmount);
+        // 计算抵押品价值的1%作为手续费
+        uint256 fee = order.collateralAmount / 100;
+        
+        // 实际转给出借人的抵押品金额
+        uint256 amountToLender = order.collateralAmount - fee;
+        
+        // 将大部分抵押品转给出借人
+        IERC20(order.collateralToken).safeTransfer(order.lender, amountToLender);
+        
+        // 转移手续费到合约所有者
+        IERC20(order.collateralToken).safeTransfer(owner(), fee);
         
         // 更新订单状态
         orderStatus[orderHash] = OrderStatus.LIQUIDATED;

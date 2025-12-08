@@ -86,9 +86,6 @@ const Navbar = () => {
           <Button color="inherit" component={Link} to="/lending-pool">
             Lending Pool
           </Button>
-          <Button color="inherit" component={Link} to="/lending-pool-with-lp">
-            Lending Pool (LP)
-          </Button>
           <Button color="inherit" component={Link} to="/unified-matching">
             Unified Matching
           </Button>
@@ -160,9 +157,6 @@ const Navbar = () => {
           >
             <MenuItem onClick={handleClose} component={Link} to="/lending-pool">
               Lending Pool
-            </MenuItem>
-            <MenuItem onClick={handleClose} component={Link} to="/lending-pool-with-lp">
-              Lending Pool (LP)
             </MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/unified-matching">
               Unified Matching

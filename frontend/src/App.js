@@ -4,7 +4,7 @@ import { Container } from '@mui/material';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import LendingPool from './components/LendingPool';
-import LendingPoolWithLP from './components/LendingPoolWithLP';
+// import LendingPoolWithLP from './components/LendingPoolWithLP';  // Removed LP version
 import UnifiedMatching from './components/UnifiedMatching';
 import LiquidityMining from './components/LiquidityMining';
 import MyOrders from './components/MyOrders';
@@ -19,7 +19,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/lending-pool" element={<LendingPool />} />
-          <Route path="/lending-pool-with-lp" element={<LendingPoolWithLP />} />
+          {/* <Route path="/lending-pool-with-lp" element={<LendingPoolWithLP />} />  Removed LP version */}
           <Route path="/unified-matching" element={<UnifiedMatching />} />
           <Route path="/liquidity-mining" element={<LiquidityMining />} />
           <Route path="/my-orders" element={<MyOrders />} />

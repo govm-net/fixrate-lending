@@ -99,10 +99,10 @@ const NETWORK_CONFIG = {
     rpcUrl: 'http://127.0.0.1:8545',
     explorer: '',
     contracts: {
-      matchingEngine: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      lendingPool: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      lendingPoolWithLP: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      liquidityMining: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+      matchingEngine: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
+      lendingPool: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
+      lendingPoolWithLP: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed',
+      liquidityMining: '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE',
     },
     tokens: [
       { 
@@ -142,10 +142,10 @@ const NETWORK_CONFIG = {
     rpcUrl: 'http://127.0.0.1:7545',
     explorer: '',
     contracts: {
-      matchingEngine: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      lendingPool: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      lendingPoolWithLP: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
-      liquidityMining: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+      matchingEngine: '0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9',
+      lendingPool: '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707',
+      lendingPoolWithLP: '0x68B1D87F95878fE05B998F19b66F4baba5De1aed',
+      liquidityMining: '0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE',
     },
     tokens: [
       { 
@@ -179,5 +179,20 @@ const NETWORK_CONFIG = {
     ]
   },
 };
+
+// 添加导出函数
+export function getContractAddresses(chainId) {
+  const config = NETWORK_CONFIG[chainId];
+  return config ? config.contracts : {};
+}
+
+export function getSupportedTokens(chainId) {
+  const config = NETWORK_CONFIG[chainId];
+  return config ? config.tokens : [];
+}
+
+export function getNetworkConfig(chainId) {
+  return NETWORK_CONFIG[chainId];
+}
 
 export default NETWORK_CONFIG;

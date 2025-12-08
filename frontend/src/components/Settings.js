@@ -35,7 +35,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import RestoreIcon from '@mui/icons-material/Restore';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { useApi } from '../contexts/ApiContext';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ethers } from 'ethers';
 
@@ -68,15 +67,6 @@ const mockTokens = [
 ];
 
 const Settings = () => {
-  const {
-    apiEndpoints,
-    selectedEndpoint,
-    setSelectedEndpoint,
-    addApiEndpoint,
-    removeApiEndpoint,
-    updateApiEndpoint,
-    resetApiEndpoints
-  } = useApi();
 
   const {
     isConnected,
@@ -114,89 +104,27 @@ const Settings = () => {
   }, [chainId]);
 
   const handleOpenDialog = (index = -1) => {
-    if (index >= 0) {
-      // Edit existing endpoint
-      const endpoint = apiEndpoints[index];
-      setEndpointName(endpoint.name);
-      setEndpointUrl(endpoint.url);
-      setEndpointChainId(endpoint.chainId);
-      setEditIndex(index);
-    } else {
-      // Add new endpoint
-      setEndpointName('');
-      setEndpointUrl('');
-      setEndpointChainId(1);
-      setEditIndex(-1);
-    }
-    setOpenDialog(true);
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleCloseDialog = () => {
-    setOpenDialog(false);
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleSaveEndpoint = () => {
-    if (!endpointName || !endpointUrl) {
-      showSnackbar('Please fill in all fields', 'error');
-      return;
-    }
-
-    const endpoint = {
-      name: endpointName,
-      url: endpointUrl,
-      chainId: endpointChainId
-    };
-
-    if (editIndex >= 0) {
-      updateApiEndpoint(editIndex, endpoint);
-      showSnackbar('API endpoint updated successfully');
-    } else {
-      addApiEndpoint(endpoint);
-      showSnackbar('API endpoint added successfully');
-    }
-
-    handleCloseDialog();
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleDeleteEndpoint = (index) => {
-    removeApiEndpoint(index);
-    showSnackbar('API endpoint removed successfully');
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleSelectEndpoint = async (endpoint) => {
-    setSelectedEndpoint(endpoint);
-    
-    // 如果端点的链ID与当前链ID不同，尝试切换网络
-    if (endpoint.chainId !== chainId) {
-      try {
-        // 显示正在切换网络的提示
-        showSnackbar(`Switching to ${getNetworkName(endpoint.chainId)}...`, 'info');
-        
-        // 尝试切换网络
-        await switchNetwork(endpoint.chainId);
-        
-        showSnackbar(`Connected to ${endpoint.name} and switched to ${getNetworkName(endpoint.chainId)}`, 'success');
-      } catch (error) {
-        console.error('Error switching network:', error);
-        
-        // 提供更具体的错误消息
-        let errorMessage = error.message;
-        if (error.code === 4001) {
-          errorMessage = 'You rejected the network switch request.';
-        } else if (error.message.includes('already pending')) {
-          errorMessage = 'A network switch request is already pending. Please check your wallet.';
-        }
-        
-        showSnackbar(`Connected to ${endpoint.name}, but failed to switch network: ${errorMessage}`, 'warning');
-      }
-    } else {
-      showSnackbar(`Connected to ${endpoint.name}`, 'success');
-    }
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleResetEndpoints = () => {
-    resetApiEndpoints();
-    showSnackbar('API endpoints reset to defaults');
+    // 移除与 useApi 相关的逻辑
   };
 
   const handleCloseSnackbar = () => {
@@ -297,258 +225,82 @@ const Settings = () => {
   };
 
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Settings
         </Typography>
-
-        {/* 添加网络卡片 - 当不在本地网络时显示 */}
-        {!isLocalNetwork && (
-          <Paper sx={{ p: 3, mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Development Networks
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              You can add and switch to local development networks for testing.
-            </Typography>
-            
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" component="div">
-                      Hardhat Network
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Local development network running on http://localhost:8545
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Chain ID: 31337
-                    </Typography>
-                  </CardContent>
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      variant="contained" 
-                      fullWidth
-                      onClick={() => handleSwitchNetwork(31337)}
-                    >
-                      Switch to Hardhat Network
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Grid>
-              
-              <Grid item xs={12} sm={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" component="div">
-                      Ganache
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Local development network running on http://localhost:7545
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Chain ID: 1337
-                    </Typography>
-                  </CardContent>
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      variant="contained" 
-                      fullWidth
-                      onClick={() => handleSwitchNetwork(1337)}
-                    >
-                      Switch to Ganache
-                    </Button>
-                  </CardActions>
-                </Card>
-              </Grid>
-            </Grid>
-          </Paper>
-        )}
-
-        {/* 测试代币卡片 - 仅在本地网络显示 */}
-        {isLocalNetwork && (
-          <Paper sx={{ p: 3, mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Test Tokens
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              You are connected to a local development network. Use the following scripts to get test tokens:
-            </Typography>
-
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                To get test ETH:
-              </Typography>
-              <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.875rem', mb: 2, overflowX: 'auto' }}>
-                npx hardhat send-test-eth --network localhost YOUR_ADDRESS 1.0
-              </Box>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Replace YOUR_ADDRESS with your wallet address and 1.0 with the amount of ETH you want.
-              </Typography>
-            </Box>
-
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                To get test tokens (USDC, DAI, WETH):
-              </Typography>
-              <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.875rem', mb: 2, overflowX: 'auto' }}>
-                npx hardhat mint-test-tokens --network localhost TOKEN_ADDRESS YOUR_ADDRESS 1000
-              </Box>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Replace TOKEN_ADDRESS with the token contract address, YOUR_ADDRESS with your wallet address, and 1000 with the amount of tokens you want.
-              </Typography>
-              
-              <Typography variant="subtitle2" gutterBottom>
-                Token Addresses:
-              </Typography>
-              <Grid container spacing={2}>
-                {mockTokens.map((token) => (
-                  <Grid item xs={12} sm={6} md={4} key={token.id}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" component="div">
-                          {token.symbol}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {token.name}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 1, wordBreak: 'break-all' }}>
-                          {token.address}
-                        </Typography>
-                      </CardContent>
-                      <CardActions>
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          fullWidth
-                          onClick={() => {
-                            navigator.clipboard.writeText(token.address);
-                            showSnackbar(`${token.symbol} address copied to clipboard`, 'success');
-                          }}
-                          startIcon={<ContentCopyIcon />}
-                        >
-                          Copy Address
-                        </Button>
-                      </CardActions>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          </Paper>
-        )}
-
-        <Paper sx={{ p: 3, mb: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">API Endpoints</Typography>
-            <Box>
-              <Button
-                variant="outlined"
-                startIcon={<RestoreIcon />}
-                onClick={handleResetEndpoints}
-                sx={{ mr: 1 }}
-              >
-                Reset to Defaults
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog()}
-              >
-                Add Endpoint
-              </Button>
-            </Box>
-          </Box>
-
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Configure the API endpoints for connecting to different networks. The selected endpoint will be used for all API calls.
-          </Typography>
-
-          <List>
-            {apiEndpoints.map((endpoint, index) => (
-              <React.Fragment key={index}>
-                {index > 0 && <Divider />}
-                <ListItem
-                  button
-                  selected={selectedEndpoint === endpoint}
-                  onClick={() => handleSelectEndpoint(endpoint)}
+        
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Network Information
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Current network information and connection status.
+                </Typography>
+                
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Connection Status:</strong> {isConnected ? 'Connected' : 'Disconnected'}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Chain ID:</strong> {chainId || 'N/A'}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Network:</strong> {getNetworkName(chainId)}
+                  </Typography>
+                </Box>
+                
+                <Button 
+                  variant="contained" 
+                  onClick={isConnected ? () => {} : connectWallet}
+                  disabled={isConnected}
                 >
-                  <ListItemText
-                    primary={endpoint.name}
-                    secondary={`${endpoint.url} (Chain ID: ${endpoint.chainId})`}
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={() => handleOpenDialog(index)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton edge="end" onClick={() => handleDeleteEndpoint(index)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              </React.Fragment>
-            ))}
-          </List>
-        </Paper>
+                  {isConnected ? 'Connected' : 'Connect Wallet'}
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Supported Tokens
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Tokens supported on the current network.
+                </Typography>
+                
+                <List>
+                  {mockTokens.map((token) => (
+                    <ListItem key={token.id} divider>
+                      <ListItemText 
+                        primary={`${token.symbol} (${token.name})`} 
+                        secondary={`Address: ${formatAddress(token.address)}`}
+                      />
+                      <ListItemSecondaryAction>
+                        <Tooltip title="Copy address">
+                          <IconButton 
+                            edge="end" 
+                            aria-label="copy"
+                            onClick={() => navigator.clipboard.writeText(token.address)}
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Box>
-
-      {/* Add/Edit Endpoint Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
-        <DialogTitle>{editIndex >= 0 ? 'Edit API Endpoint' : 'Add API Endpoint'}</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Endpoint Name"
-            fullWidth
-            value={endpointName}
-            onChange={(e) => setEndpointName(e.target.value)}
-          />
-          <TextField
-            margin="dense"
-            label="Endpoint URL"
-            fullWidth
-            value={endpointUrl}
-            onChange={(e) => setEndpointUrl(e.target.value)}
-          />
-          <FormControl fullWidth margin="dense">
-            <InputLabel>Chain ID</InputLabel>
-            <Select
-              value={endpointChainId}
-              onChange={(e) => setEndpointChainId(e.target.value)}
-              label="Chain ID"
-            >
-              <MenuItem value={1}>1 - Ethereum Mainnet</MenuItem>
-              <MenuItem value={5}>5 - Goerli Testnet</MenuItem>
-              <MenuItem value={11155111}>11155111 - Sepolia Testnet</MenuItem>
-              <MenuItem value={137}>137 - Polygon Mainnet</MenuItem>
-              <MenuItem value={80001}>80001 - Mumbai Testnet</MenuItem>
-              <MenuItem value={1337}>1337 - Local Development</MenuItem>
-              <MenuItem value={31337}>31337 - Hardhat Network</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSaveEndpoint} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
     </Container>
   );
 };

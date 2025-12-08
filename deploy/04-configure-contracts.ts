@@ -45,14 +45,24 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     
     try {
       // 获取已部署的测试代币
-      const mockUSDC = await deployments.get("MockToken");
-      const mockWETH = await deployments.get("MockToken");
-      const mockWBTC = await deployments.get("MockToken");
+      const mockUSDC = await deployments.get("MockUSDC");
+      const mockDAI = await deployments.get("MockDAI");
+      const mockWETH = await deployments.get("MockWETH");
+      const mockWBTC = await deployments.get("MockWBTC");
       
-      // 获取已部署的价格预言机
-      const usdcPriceFeed = await deployments.get("MockPriceFeed");
-      const wethPriceFeed = await deployments.get("MockPriceFeed");
-      const wbtcPriceFeed = await deployments.get("MockPriceFeed");
+      // 部署价格预言机
+      const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
+      const usdcPriceFeed = await MockV3Aggregator.deploy(8, 100000000); // $1 with 8 decimals
+      await usdcPriceFeed.waitForDeployment();
+      
+      const daiPriceFeed = await MockV3Aggregator.deploy(8, 100000000); // $1 with 8 decimals
+      await daiPriceFeed.waitForDeployment();
+      
+      const wethPriceFeed = await MockV3Aggregator.deploy(8, 300000000000); // $3000 with 8 decimals
+      await wethPriceFeed.waitForDeployment();
+      
+      const wbtcPriceFeed = await MockV3Aggregator.deploy(8, 5000000000000); // $50000 with 8 decimals
+      await wbtcPriceFeed.waitForDeployment();
       
       // 添加支持的代币到借贷池
       const lendingPoolWithAbi = await ethers.getContractAt(
@@ -61,21 +71,41 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       );
       
       console.log("Adding USDC to lending pool...");
-      const tx2 = await lendingPoolWithAbi.addSupportedToken(mockUSDC.address, usdcPriceFeed.address);
+      const tx2 = await lendingPoolWithAbi.addSupportedToken(mockUSDC.address, await usdcPriceFeed.getAddress());
       await tx2.wait();
       
-      console.log("Adding WETH to lending pool...");
-      const tx3 = await lendingPoolWithAbi.addSupportedToken(mockWETH.address, wethPriceFeed.address);
+      console.log("Adding DAI to lending pool...");
+      const tx3 = await lendingPoolWithAbi.addSupportedToken(mockDAI.address, await daiPriceFeed.getAddress());
       await tx3.wait();
       
-      console.log("Adding WBTC to lending pool...");
-      const tx4 = await lendingPoolWithAbi.addSupportedToken(mockWBTC.address, wbtcPriceFeed.address);
+      console.log("Adding WETH to lending pool...");
+      const tx4 = await lendingPoolWithAbi.addSupportedToken(mockWETH.address, await wethPriceFeed.getAddress());
       await tx4.wait();
+      
+      console.log("Adding WBTC to lending pool...");
+      const tx5 = await lendingPoolWithAbi.addSupportedToken(mockWBTC.address, await wbtcPriceFeed.getAddress());
+      await tx5.wait();
       
       console.log("Successfully configured test tokens and price feeds");
     } catch (error) {
       console.error("Error configuring test tokens and price feeds:", error);
     }
+  }
+
+  // 3. 授权匹配引擎
+  try {
+    console.log("Authorizing matching engine...");
+    const matchingEngineContract = await ethers.getContractAt(
+      ["function authorizeChecker(address) external"],
+      matchingEngine.address
+    );
+    
+    // 授权借贷池作为检查器
+    const tx = await matchingEngineContract.authorizeChecker(lendingPool.address);
+    await tx.wait();
+    console.log("Successfully authorized lending pool as checker");
+  } catch (error) {
+    console.error("Error authorizing matching engine:", error);
   }
 
   console.log("Contract configuration completed!");

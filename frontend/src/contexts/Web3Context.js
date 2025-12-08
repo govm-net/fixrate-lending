@@ -1,23 +1,25 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { ethers } from 'ethers';
-import { useApi } from './ApiContext';
+// import { useApi } from './ApiContext';
 
 // 导入网络配置
 import { getContractAddresses, getSupportedTokens, getNetworkConfig } from '../utils/networkConfig';
 // 导入测试钱包工具
-import { getTestWallet } from '../utils/testWallet';
+// import { getTestWallet } from '../utils/testWallet';
 
 // ABI imports
 import UnifiedMatchingEngineABI from '../utils/abis/UnifiedMatchingEngine.json';
 import FixedRateLendingPoolABI from '../utils/abis/FixedRateLendingPool.json';
-import FixedRateLendingPoolWithLPABI from '../utils/abis/FixedRateLendingPoolWithLP.json';
 import LiquidityMiningABI from '../utils/abis/LiquidityMining.json';
 import ERC20ABI from '../utils/abis/ERC20.json';
 
 export const Web3Context = createContext();
 
 export const Web3Provider = ({ children }) => {
-  const { selectedEndpoint, setSelectedEndpoint, apiEndpoints } = useApi();
+  // const { selectedEndpoint, setSelectedEndpoint, apiEndpoints } = useApi();
+  const selectedEndpoint = null;
+  const setSelectedEndpoint = () => {};
+  const apiEndpoints = [];
   
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
@@ -26,13 +28,12 @@ export const Web3Provider = ({ children }) => {
   const [contracts, setContracts] = useState({
     matchingEngine: null,
     lendingPool: null,
-    lendingPoolWithLP: null,
     liquidityMining: null
   });
   const [contractAddresses, setContractAddresses] = useState({
     matchingEngine: null,
     lendingPool: null,
-    lendingPoolWithLP: null
+    liquidityMining: null
   });
   const [supportedTokens, setSupportedTokens] = useState([]);
 
@@ -45,11 +46,11 @@ export const Web3Provider = ({ children }) => {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         // 创建新的提供商实例
-        const newProvider = new ethers.BrowserProvider(window.ethereum);
+        const newProvider = new ethers.providers.Web3Provider(window.ethereum);
         setProvider(newProvider);
         
         // 获取签名者
-        const newSigner = await newProvider.getSigner();
+        const newSigner = newProvider.getSigner();
         setSigner(newSigner);
         
         // 获取账户地址
@@ -69,9 +70,11 @@ export const Web3Provider = ({ children }) => {
         return true;
       } else if (process.env.NODE_ENV === 'development') {
         // 在开发环境中使用测试钱包
-        const testWallet = getTestWallet();
-        const testProvider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
-        const testSigner = testWallet.connect(testProvider);
+        // const testWallet = getTestWallet();
+        const testProvider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545');
+        // const testSigner = testWallet.connect(testProvider);
+        const accounts = await testProvider.listAccounts();
+        const testSigner = testProvider.getSigner(accounts[0]); 
         
         setProvider(testProvider);
         setSigner(testSigner);
@@ -104,7 +107,8 @@ export const Web3Provider = ({ children }) => {
     setContractAddresses({
       matchingEngine: null,
       lendingPool: null,
-      lendingPoolWithLP: null
+      lendingPoolWithLP: null,
+      liquidityMining: null
     });
     
     // 清理事件监听器
@@ -148,7 +152,7 @@ export const Web3Provider = ({ children }) => {
         // 尝试切换到指定网络
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: ethers.toQuantity(targetChainId) }],
+          params: [{ chainId: ethers.utils.hexValue(targetChainId) }],
         });
       } else {
         console.log('无法切换网络：未检测到以太坊提供商');
@@ -231,7 +235,7 @@ export const Web3Provider = ({ children }) => {
 
   // 当提供商和合约地址可用时，初始化合约实例
   useEffect(() => {
-    if (provider && (contractAddresses.matchingEngine || contractAddresses.lendingPool || contractAddresses.lendingPoolWithLP)) {
+    if (provider && (contractAddresses.matchingEngine || contractAddresses.lendingPool /* || contractAddresses.lendingPoolWithLP */ || contractAddresses.liquidityMining)) {
       const matchingEngine = contractAddresses.matchingEngine ? 
         new ethers.Contract(
           contractAddresses.matchingEngine,
@@ -246,12 +250,14 @@ export const Web3Provider = ({ children }) => {
           provider
         ) : null;
       
+      /*
       const lendingPoolWithLP = contractAddresses.lendingPoolWithLP ? 
         new ethers.Contract(
           contractAddresses.lendingPoolWithLP,
           FixedRateLendingPoolWithLPABI,
           provider
         ) : null;
+      */
       
       const liquidityMining = contractAddresses.liquidityMining ? 
         new ethers.Contract(
@@ -263,7 +269,7 @@ export const Web3Provider = ({ children }) => {
       setContracts({
         matchingEngine,
         lendingPool,
-        lendingPoolWithLP,
+        // lendingPoolWithLP,  // Removed LP version
         liquidityMining
       });
     }
