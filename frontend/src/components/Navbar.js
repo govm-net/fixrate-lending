@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next'; // 引入 useTranslation hook
 import {
   AppBar,
   Toolbar,
@@ -10,13 +11,17 @@ import {
   MenuItem,
   Chip,
   Tooltip,
-  Box
+  Box,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import { useWeb3 } from '../contexts/Web3Context';
 
 const Navbar = () => {
+  const { t, i18n } = useTranslation(); // 使用 useTranslation hook
   const { isConnected, account, chainId, connectWallet, disconnectWallet, switchNetwork } = useWeb3();
   const [anchorEl, setAnchorEl] = useState(null);
   const [networkAnchorEl, setNetworkAnchorEl] = useState(null);
@@ -37,6 +42,11 @@ const Navbar = () => {
   
   const handleNetworkClose = () => {
     setNetworkAnchorEl(null);
+  };
+  
+  // 切换语言
+  const handleLanguageChange = (event) => {
+    i18n.changeLanguage(event.target.value);
   };
   
   // 获取网络名称
@@ -79,29 +89,44 @@ const Navbar = () => {
     <AppBar position="static">
       <Toolbar>
         <Typography variant="h6" component={Link} to="/" sx={{ flexGrow: 1, textDecoration: 'none', color: 'white' }}>
-          Fixed Rate Lending Platform
+          {t('navbar.platform_name')}
         </Typography>
+        
+        {/* 语言选择器 */}
+        <FormControl variant="outlined" size="small" sx={{ minWidth: 120, mr: 2 }}>
+          <Select
+            value={i18n.language}
+            onChange={handleLanguageChange}
+            sx={{ color: 'white', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'white' } }}
+          >
+            <MenuItem value="en">English</MenuItem>
+            <MenuItem value="zh">中文</MenuItem>
+          </Select>
+        </FormControl>
         
         <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
           <Button color="inherit" component={Link} to="/lending-pool">
-            Lending Pool
+            {t('navbar.lending_pool')}
           </Button>
+          {/* <Button color="inherit" component={Link} to="/lending-pool-with-lp">
+            {t('navbar.lending_pool_lp')}
+          </Button> */}
           <Button color="inherit" component={Link} to="/unified-matching">
-            Unified Matching
+            {t('navbar.unified_matching')}
           </Button>
           <Button color="inherit" component={Link} to="/liquidity-mining">
-            Liquidity Mining
+            {t('navbar.liquidity_mining')}
           </Button>
           <Button color="inherit" component={Link} to="/my-orders">
-            My Orders
+            {t('navbar.my_orders')}
           </Button>
           <Button color="inherit" component={Link} to="/settings">
-            Settings
+            {t('navbar.settings')}
           </Button>
         </Box>
         
         {isConnected && (
-          <Tooltip title="Switch Network">
+          <Tooltip title={t('navbar.switch_network')}>
             <Chip
               icon={<NetworkCheckIcon />}
               label={networkName}
@@ -115,7 +140,7 @@ const Navbar = () => {
         
         {!isConnected ? (
           <Button color="inherit" onClick={connectWallet}>
-            Connect Wallet
+            {t('navbar.connect_wallet')}
           </Button>
         ) : (
           <Tooltip title={`Connected: ${account?.substring(0, 6)}...${account?.substring(account.length - 4)}`}>
@@ -156,19 +181,22 @@ const Navbar = () => {
             onClose={handleClose}
           >
             <MenuItem onClick={handleClose} component={Link} to="/lending-pool">
-              Lending Pool
+              {t('navbar.lending_pool')}
             </MenuItem>
+            {/* <MenuItem onClick={handleClose} component={Link} to="/lending-pool-with-lp">
+              {t('navbar.lending_pool_lp')}
+            </MenuItem> */}
             <MenuItem onClick={handleClose} component={Link} to="/unified-matching">
-              Unified Matching
+              {t('navbar.unified_matching')}
             </MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/liquidity-mining">
-              Liquidity Mining
+              {t('navbar.liquidity_mining')}
             </MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/my-orders">
-              My Orders
+              {t('navbar.my_orders')}
             </MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/settings">
-              Settings
+              {t('navbar.settings')}
             </MenuItem>
           </Menu>
         </Box>

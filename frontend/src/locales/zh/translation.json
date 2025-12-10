@@ -1,0 +1,56 @@
+{
+  "home": {
+    "title": "欢迎来到固定利率借贷平台",
+    "subtitle": "一个去中心化的固定利率借贷平台",
+    "connect_wallet": "连接钱包开始使用",
+    "lending_pool": {
+      "title": "借贷池",
+      "description": "存入您的资产以赚取利息，或通过提供抵押品借入资产。我们的固定利率借贷池为您提供可预测的收益和借款成本。"
+    },
+    "unified_matching": {
+      "title": "统一对等匹配引擎",
+      "description": "直接与其他用户创建或完成借贷订单。设置您自己的条款、利率和抵押要求。"
+    },
+    "how_it_works": "工作原理",
+    "step1": {
+      "title": "1. 连接您的钱包",
+      "description": "连接您的Web3钱包以与去中心化借贷平台交互。"
+    },
+    "step2": {
+      "title": "2. 存款或借款",
+      "description": "存入您的资产以赚取利息，或通过提供足够的抵押品借入资产。"
+    },
+    "step3": {
+      "title": "3. 赚取或支付固定利率",
+      "description": "从您的存款中赚取可预测的利息，或为您的贷款支付固定利息。"
+    }
+  },
+  "navbar": {
+    "platform_name": "固定利率借贷平台",
+    "lending_pool": "借贷池",
+    "unified_matching": "统一对等匹配",
+    "liquidity_mining": "流动性挖矿",
+    "my_orders": "我的订单",
+    "settings": "设置",
+    "connect_wallet": "连接钱包",
+    "switch_network": "切换网络"
+  },
+  "lending_pool": {
+    "title": "借贷池",
+    "connect_wallet": "请连接钱包以与借贷池交互。",
+    "no_tokens": "当前网络 (Chain ID: {{chainId}}) 未找到支持的代币。",
+    "switch_network": "请切换到受支持的网络。",
+    "deposit_tab": "存款",
+    "withdraw_tab": "提款",
+    "deposit_description": "将您的资产存入借贷池以赚取利息。资金池将自动匹配借款人并为您管理贷款。",
+    "withdraw_description": "从借贷池中提取您的资产。请注意，您只能提取当前未被借用的资金。",
+    "token_label": "代币",
+    "amount_label": "金额",
+    "deposit_button": "存款",
+    "withdraw_button": "提款",
+    "pool_parameters": "资金池参数",
+    "min_interest_rate": "最低利率",
+    "max_loan_duration": "最长贷款期限",
+    "min_collateral_ratio": "最低抵押率"
+  }
+}

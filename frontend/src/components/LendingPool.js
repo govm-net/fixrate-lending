@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next'; // 引入 useTranslation hook
 import {
   Container,
   Typography,
@@ -25,6 +26,7 @@ import { ethers } from 'ethers';
 import { useWeb3 } from '../contexts/Web3Context';
 
 const LendingPool = () => {
+  const { t } = useTranslation(); // 使用 useTranslation hook
   const { 
     account, 
     chainId,
@@ -271,25 +273,25 @@ const LendingPool = () => {
     <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Lending Pool
+          {t('lending_pool.title')}
         </Typography>
 
         {!isConnected ? (
           <Paper sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body1" paragraph>
-              Connect your wallet to interact with the lending pool.
+              {t('lending_pool.connect_wallet')}
             </Typography>
             <Button variant="contained" onClick={connectWallet}>
-              Connect Wallet
+              {t('navbar.connect_wallet')}
             </Button>
           </Paper>
         ) : supportedTokens.length === 0 ? (
           <Paper sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body1" paragraph>
-              No supported tokens found for the current network (Chain ID: {chainId}).
+              {t('lending_pool.no_tokens', { chainId })}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Please switch to a supported network.
+              {t('lending_pool.switch_network')}
             </Typography>
           </Paper>
         ) : (
@@ -298,27 +300,27 @@ const LendingPool = () => {
               <Grid item xs={12} md={8}>
                 <Paper sx={{ p: 3, mb: 3 }}>
                   <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
-                    <Tab label="Deposit" />
-                    <Tab label="Withdraw" />
+                    <Tab label={t('lending_pool.deposit_tab')} />
+                    <Tab label={t('lending_pool.withdraw_tab')} />
                   </Tabs>
 
                   <Box sx={{ p: 1 }}>
                     {tabValue === 0 ? (
                       <Typography variant="body2" color="text.secondary" paragraph>
-                        Deposit your assets into the lending pool to earn interest. The pool will automatically match borrowers and manage loans for you.
+                        {t('lending_pool.deposit_description')}
                       </Typography>
                     ) : (
                       <Typography variant="body2" color="text.secondary" paragraph>
-                        Withdraw your assets from the lending pool. Note that you can only withdraw available funds that are not currently being borrowed.
+                        {t('lending_pool.withdraw_description')}
                       </Typography>
                     )}
 
                     <FormControl fullWidth sx={{ mb: 2 }}>
-                      <InputLabel>Token</InputLabel>
+                      <InputLabel>{t('lending_pool.token_label')}</InputLabel>
                       <Select
                         value={selectedToken}
                         onChange={handleTokenChange}
-                        label="Token"
+                        label={t('lending_pool.token_label')}
                       >
                         {supportedTokens.map((token) => (
                           <MenuItem key={`${token.address}-${token.symbol}`} value={token.address}>
@@ -330,7 +332,7 @@ const LendingPool = () => {
 
                     <TextField
                       fullWidth
-                      label="Amount"
+                      label={t('lending_pool.amount_label')}
                       type="number"
                       value={amount}
                       onChange={handleAmountChange}
@@ -344,7 +346,7 @@ const LendingPool = () => {
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         {tabValue === 0 ? (
                           <>
-                            Your balance: {formatTokenAmount(selectedToken, poolData.userBalances[selectedToken])} {getTokenSymbol(selectedToken)}
+                            {t('lending_pool.deposit_description')} {formatTokenAmount(selectedToken, poolData.userBalances[selectedToken])} {getTokenSymbol(selectedToken)}
                             {getTokenSymbol(selectedToken) === 'USDC' && (
                               <span style={{ color: '#666', fontSize: '0.8rem', marginLeft: '5px' }}>
                                 (USDC has 6 decimals)
@@ -353,7 +355,7 @@ const LendingPool = () => {
                           </>
                         ) : (
                           <>
-                            Available in pool: {formatTokenAmount(selectedToken, poolData.availableBalances[selectedToken])} {getTokenSymbol(selectedToken)}
+                            {t('lending_pool.withdraw_description')} {formatTokenAmount(selectedToken, poolData.availableBalances[selectedToken])} {getTokenSymbol(selectedToken)}
                             {getTokenSymbol(selectedToken) === 'USDC' && (
                               <span style={{ color: '#666', fontSize: '0.8rem', marginLeft: '5px' }}>
                                 (USDC has 6 decimals)
@@ -373,7 +375,7 @@ const LendingPool = () => {
                       {loading ? (
                         <CircularProgress size={24} />
                       ) : (
-                        tabValue === 0 ? 'Deposit' : 'Withdraw'
+                        tabValue === 0 ? t('lending_pool.deposit_button') : t('lending_pool.withdraw_button')
                       )}
                     </Button>
                   </Box>
@@ -384,62 +386,38 @@ const LendingPool = () => {
                 <Card sx={{ mb: 3 }}>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>
-                      Pool Parameters
+                      {t('lending_pool.pool_parameters')}
                     </Typography>
                     <Divider sx={{ mb: 2 }} />
                     <Typography variant="body2" color="text.secondary">
-                      Minimum Interest Rate: {poolData.minInterestRate / 100}%
+                      {t('lending_pool.min_interest_rate')}: {poolData.minInterestRate / 100}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Maximum Loan Duration: {poolData.maxLoanDuration / (24 * 60 * 60)} days
+                      {t('lending_pool.max_loan_duration')}: {poolData.maxLoanDuration / (24 * 60 * 60)} days
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Minimum Collateral Ratio: {poolData.minCollateralRatio / 100}%
+                      {t('lending_pool.min_collateral_ratio')}: {poolData.minCollateralRatio / 100}%
                     </Typography>
                   </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Pool Balances
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                    {supportedTokens.map((token) => (
-                      <Box key={`${token.address}-${token.symbol}`} sx={{ mb: 1 }}>
-                        <Typography variant="body2">
-                          {token.symbol}: {formatTokenAmount(token.address, poolData.poolBalances[token.address])}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                          Available: {formatTokenAmount(token.address, poolData.availableBalances[token.address])}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                  <CardActions>
-                    <Button size="small" onClick={fetchPoolData}>
-                      Refresh
-                    </Button>
-                  </CardActions>
                 </Card>
               </Grid>
             </Grid>
           </>
         )}
-      </Box>
 
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </Box>
     </Container>
   );
 };
 
-export default LendingPool; 
+export default LendingPool;

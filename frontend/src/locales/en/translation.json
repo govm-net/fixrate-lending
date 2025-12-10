@@ -1,0 +1,56 @@
+{
+  "home": {
+    "title": "Welcome to Fixed Rate Lending Platform",
+    "subtitle": "A decentralized platform for fixed-rate lending and borrowing",
+    "connect_wallet": "Connect Wallet to Get Started",
+    "lending_pool": {
+      "title": "Lending Pool",
+      "description": "Deposit your assets to earn interest or borrow assets by providing collateral. Our fixed-rate lending pool offers predictable returns and borrowing costs."
+    },
+    "unified_matching": {
+      "title": "Unified Matching Engine",
+      "description": "Create or fulfill lending orders directly with other users. Set your own terms, interest rates, and collateral requirements."
+    },
+    "how_it_works": "How It Works",
+    "step1": {
+      "title": "1. Connect Your Wallet",
+      "description": "Connect your Web3 wallet to interact with the decentralized lending platform."
+    },
+    "step2": {
+      "title": "2. Deposit or Borrow",
+      "description": "Deposit your assets to earn interest, or borrow assets by providing sufficient collateral."
+    },
+    "step3": {
+      "title": "3. Earn or Pay Fixed Rates",
+      "description": "Earn predictable interest on your deposits or pay fixed interest on your loans."
+    }
+  },
+  "navbar": {
+    "platform_name": "Fixed Rate Lending Platform",
+    "lending_pool": "Lending Pool",
+    "unified_matching": "Unified Matching",
+    "liquidity_mining": "Liquidity Mining",
+    "my_orders": "My Orders",
+    "settings": "Settings",
+    "connect_wallet": "Connect Wallet",
+    "switch_network": "Switch Network"
+  },
+  "lending_pool": {
+    "title": "Lending Pool",
+    "connect_wallet": "Connect your wallet to interact with the lending pool.",
+    "no_tokens": "No supported tokens found for the current network (Chain ID: {{chainId}}).",
+    "switch_network": "Please switch to a supported network.",
+    "deposit_tab": "Deposit",
+    "withdraw_tab": "Withdraw",
+    "deposit_description": "Deposit your assets into the lending pool to earn interest. The pool will automatically match borrowers and manage loans for you.",
+    "withdraw_description": "Withdraw your assets from the lending pool. Note that you can only withdraw available funds that are not currently being borrowed.",
+    "token_label": "Token",
+    "amount_label": "Amount",
+    "deposit_button": "Deposit",
+    "withdraw_button": "Withdraw",
+    "pool_parameters": "Pool Parameters",
+    "min_interest_rate": "Minimum Interest Rate",
+    "max_loan_duration": "Maximum Loan Duration",
+    "min_collateral_ratio": "Minimum Collateral Ratio"
+  }
+}

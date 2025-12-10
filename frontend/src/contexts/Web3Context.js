@@ -81,6 +81,13 @@ export const Web3Provider = ({ children }) => {
         setAccount(await testSigner.getAddress());
         setChainId(31337);
         
+        // 在开发环境中也初始化合约
+        const addresses = getContractAddresses(31337);
+        setContractAddresses(addresses);
+        
+        const tokens = getSupportedTokens(31337);
+        setSupportedTokens(tokens);
+        
         return true;
       } else {
         console.log('请安装MetaMask或其他以太坊钱包');
@@ -101,13 +108,11 @@ export const Web3Provider = ({ children }) => {
     setContracts({
       matchingEngine: null,
       lendingPool: null,
-      lendingPoolWithLP: null,
       liquidityMining: null
     });
     setContractAddresses({
       matchingEngine: null,
       lendingPool: null,
-      lendingPoolWithLP: null,
       liquidityMining: null
     });
     
@@ -235,45 +240,47 @@ export const Web3Provider = ({ children }) => {
 
   // 当提供商和合约地址可用时，初始化合约实例
   useEffect(() => {
-    if (provider && (contractAddresses.matchingEngine || contractAddresses.lendingPool /* || contractAddresses.lendingPoolWithLP */ || contractAddresses.liquidityMining)) {
+    // 在开发环境中，provider可能来自JsonRpcProvider而不是Web3Provider
+    const providerToUse = provider || (process.env.NODE_ENV === 'development' ? 
+      new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545') : null);
+      
+    if (providerToUse && (contractAddresses.matchingEngine || contractAddresses.lendingPool || contractAddresses.liquidityMining)) {
+      // 连接合约到签名者（如果有）或者提供商
+      const signerOrProvider = signer || providerToUse;
+      
+      // 确保ABI是数组格式
+      const unifiedMatchingEngineABI = Array.isArray(UnifiedMatchingEngineABI) ? UnifiedMatchingEngineABI : UnifiedMatchingEngineABI.abi;
+      const fixedRateLendingPoolABI = Array.isArray(FixedRateLendingPoolABI) ? FixedRateLendingPoolABI : FixedRateLendingPoolABI.abi;
+      const liquidityMiningABI = Array.isArray(LiquidityMiningABI) ? LiquidityMiningABI : LiquidityMiningABI.abi;
+      
       const matchingEngine = contractAddresses.matchingEngine ? 
         new ethers.Contract(
           contractAddresses.matchingEngine,
-          UnifiedMatchingEngineABI,
-          provider
+          unifiedMatchingEngineABI,
+          signerOrProvider
         ) : null;
       
       const lendingPool = contractAddresses.lendingPool ? 
         new ethers.Contract(
           contractAddresses.lendingPool,
-          FixedRateLendingPoolABI,
-          provider
+          fixedRateLendingPoolABI,
+          signerOrProvider
         ) : null;
-      
-      /*
-      const lendingPoolWithLP = contractAddresses.lendingPoolWithLP ? 
-        new ethers.Contract(
-          contractAddresses.lendingPoolWithLP,
-          FixedRateLendingPoolWithLPABI,
-          provider
-        ) : null;
-      */
       
       const liquidityMining = contractAddresses.liquidityMining ? 
         new ethers.Contract(
           contractAddresses.liquidityMining,
-          LiquidityMiningABI,
-          provider
+          liquidityMiningABI,
+          signerOrProvider
         ) : null;
 
       setContracts({
         matchingEngine,
         lendingPool,
-        // lendingPoolWithLP,  // Removed LP version
         liquidityMining
       });
     }
-  }, [provider, contractAddresses]);
+  }, [provider, signer, contractAddresses]);
 
   return (
     <Web3Context.Provider

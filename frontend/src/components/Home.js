@@ -1,31 +1,32 @@
 import React from 'react';
-import { 
-  Typography, 
-  Box, 
-  Card, 
-  CardContent, 
-  Grid, 
-  Button, 
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next'; // 引入 useTranslation hook
+import {
   Container,
+  Typography,
+  Box,
+  Grid,
+  Card,
+  CardContent,
+  Button,
   Paper
 } from '@mui/material';
-import { Link } from 'react-router-dom';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import PeopleIcon from '@mui/icons-material/People';
-import SettingsIcon from '@mui/icons-material/Settings';
 import { useWeb3 } from '../contexts/Web3Context';
 
 const Home = () => {
+  const { t } = useTranslation(); // 使用 useTranslation hook
   const { isConnected, connectWallet } = useWeb3();
 
   return (
     <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
         <Typography variant="h3" component="h1" gutterBottom align="center">
-          Welcome to Fixed Rate Lending Platform
+          {t('home.title')}
         </Typography>
         <Typography variant="h5" align="center" color="text.secondary" paragraph>
-          A decentralized platform for fixed-rate lending and borrowing
+          {t('home.subtitle')}
         </Typography>
         
         {!isConnected && (
@@ -36,7 +37,7 @@ const Home = () => {
               onClick={connectWallet}
               sx={{ mt: 2 }}
             >
-              Connect Wallet to Get Started
+              {t('home.connect_wallet')}
             </Button>
           </Box>
         )}
@@ -48,12 +49,11 @@ const Home = () => {
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
                   <AccountBalanceIcon fontSize="large" color="primary" />
                   <Typography variant="h5" component="div" sx={{ mt: 1 }}>
-                    Lending Pool
+                    {t('home.lending_pool.title')}
                   </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary">
-                  Deposit your assets to earn interest or borrow assets by providing collateral. 
-                  Our fixed-rate lending pool offers predictable returns and borrowing costs.
+                  {t('home.lending_pool.description')}
                 </Typography>
                 <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
                   <Button 
@@ -61,7 +61,7 @@ const Home = () => {
                     component={Link} 
                     to="/lending-pool"
                   >
-                    Go to Lending Pool
+                    {t('home.lending_pool.title')}
                   </Button>
                 </Box>
               </CardContent>
@@ -74,12 +74,11 @@ const Home = () => {
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
                   <PeopleIcon fontSize="large" color="primary" />
                   <Typography variant="h5" component="div" sx={{ mt: 1 }}>
-                    Unified Matching Engine
+                    {t('home.unified_matching.title')}
                   </Typography>
                 </Box>
                 <Typography variant="body2" color="text.secondary">
-                  Create or fulfill lending orders directly with other users. Set your own terms, 
-                  interest rates, and collateral requirements.
+                  {t('home.unified_matching.description')}
                 </Typography>
                 <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
                   <Button 
@@ -87,7 +86,7 @@ const Home = () => {
                     component={Link} 
                     to="/unified-matching"
                   >
-                    Go to Unified Matching
+                    {t('home.unified_matching.title')}
                   </Button>
                 </Box>
               </CardContent>
@@ -97,36 +96,36 @@ const Home = () => {
         
         <Box sx={{ mt: 6 }}>
           <Typography variant="h4" component="h2" gutterBottom align="center">
-            How It Works
+            {t('home.how_it_works')}
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
               <Paper sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
-                  1. Connect Your Wallet
+                  {t('home.step1.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Connect your Web3 wallet to interact with the decentralized lending platform.
+                  {t('home.step1.description')}
                 </Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
               <Paper sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
-                  2. Deposit or Borrow
+                  {t('home.step2.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Deposit your assets to earn interest, or borrow assets by providing sufficient collateral.
+                  {t('home.step2.description')}
                 </Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
               <Paper sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
-                  3. Earn or Pay Fixed Rates
+                  {t('home.step3.title')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Earn predictable interest on your deposits or pay fixed interest on your loans.
+                  {t('home.step3.description')}
                 </Typography>
               </Paper>
             </Grid>

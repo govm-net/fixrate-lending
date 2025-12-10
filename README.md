@@ -44,14 +44,21 @@ npx hardhat node
 ganache-cli -p 7545
 ```
 
-2. 部署合约并更新前端配置:
+2. 部署合约:
 
 ```bash
-# 一键部署和更新前端配置
-node scripts/deploy-and-update.js hardhat  # 或 ganache
+# 部署到本地网络
+npx hardhat deploy --network localhost
 ```
 
-3. 发放测试代币和ETH:
+3. 更新前端配置:
+
+```bash
+# 更新前端配置文件中的合约地址
+npx hardhat update-frontend-config --net localhost
+```
+
+4. 发放测试代币和ETH:
 
 ```bash
 # 发放测试代币到默认地址
@@ -62,28 +69,31 @@ RECIPIENT=0x123... npx hardhat run scripts/mint-test-tokens.ts --network localho
 
 # 发送测试ETH到指定地址
 RECIPIENT=0x123... AMOUNT=5 npx hardhat run scripts/send-test-eth.ts --network localhost
-
-# 一键部署、更新配置并发放测试代币
-node scripts/deploy-update-mint.js localhost [接收者地址]
 ```
 
-4. 启动前端应用:
+5. 启动前端应用:
 
 ```bash
 cd frontend
 npm start
 ```
 
-5. 在浏览器中访问: `http://localhost:3000`
+6. 在浏览器中访问: `http://localhost:3000`
 
 ## 部署到测试网络
 
 ```bash
 # 部署到Sepolia测试网
-node scripts/deploy-and-update.js sepolia
+npx hardhat deploy --network sepolia
+
+# 更新前端配置
+npx hardhat update-frontend-config --net sepolia
 
 # 部署到Mumbai测试网
-node scripts/deploy-and-update.js mumbai
+npx hardhat deploy --network mumbai
+
+# 更新前端配置
+npx hardhat update-frontend-config --net mumbai
 ```
 
 ## 发放测试代币和ETH
@@ -129,18 +139,6 @@ RECIPIENT=0x123... npx hardhat run scripts/mint-test-tokens.ts --network localho
 - 10 WETH (18位小数)
 - 1 WBTC (8位小数)
 
-### 一键部署和发放测试代币
-
-使用 `deploy-update-mint.js` 脚本一键完成部署、配置更新和测试代币发放：
-
-```bash
-# 部署、更新配置并为默认地址发放测试代币
-node scripts/deploy-update-mint.js localhost
-
-# 部署、更新配置并为指定地址发放测试代币和ETH
-node scripts/deploy-update-mint.js localhost 0x123...
-```
-
 ## 开发指南
 
 ### 智能合约开发
@@ -178,12 +176,8 @@ npm build  # 构建生产版本
 
 项目包含多个实用脚本，用于自动化部署和配置过程:
 
-- `scripts/deploy-and-update.js`: 一键部署合约并更新前端配置
-- `scripts/simple-update-config.js`: 从部署信息更新前端配置
-- `scripts/update-config-from-console.js`: 从控制台输出更新前端配置
-- `scripts/send-test-eth.ts`: 发送测试ETH到指定地址
-- `scripts/mint-test-tokens.ts`: 铸造测试代币到指定地址
-- `scripts/deploy-update-mint.js`: 一键部署、更新配置并发放测试代币
+- `scripts/deploy-new-contracts.js`: 部署新合约的脚本
+- `scripts/update-frontend-config.ts`: 更新前端配置的脚本
 
 详细说明请参考 [脚本README](./scripts/README.md)。
 
